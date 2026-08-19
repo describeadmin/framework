@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.describeadmin</groupId>
+    <artifactId>framework-parent</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>framework-bom</artifactId>
+  <packaging>pom</packaging>
+
+  <name>describeadmin :: framework-bom</name>
+  <description>版本仲裁 BOM —— 业务方只需引入本 BOM，无需逐个指定框架模块版本</description>
+
+  <!--
+    本 BOM 从 framework-parent 继承以下管理条目，无需重复声明：
+      - com.mysql:mysql-connector-j  → 8.2.0（5.7-safe 默认值，业务方可覆盖）
+      - spring-boot-dependencies     → 3.5.16
+      - mybatis-plus-bom             → 3.5.17
+
+    生效原理：consumer 以 <scope>import</scope> 引入本 BOM 时，Maven 解析的是本 POM 的
+    【有效 POM】，其中已包含从父 POM 继承来的 dependencyManagement。
+    同时，import 只取 dependencyManagement，不会带入父 POM 的 <dependencies>
+    （lombok / spring-boot-starter-test），因此继承是安全的。
+
+    本文件只需追加框架自身的模块。
+  -->
+  <!--
+    本 POM 的 dependencyManagement 为空是【有意的】，不是漏写。
+
+    全部管理条目都在父 POM framework-parent 中声明：
+      - com.mysql:mysql-connector-j   → 8.2.0（5.7-safe 默认值，业务方可覆盖）
+      - spring-boot-dependencies      → 3.5.16
+      - mybatis-plus-bom              → 3.5.17
+      - framework-* 各模块            → ${project.version}
+
+    生效原理：业务方以 <scope>import</scope> 引入本 BOM 时，Maven 解析的是本 POM 的
+    【有效 POM】，其中已包含从父 POM 继承来的全部 dependencyManagement。
+    同时 import 只取 dependencyManagement，不会带入父 POM 的 <dependencies>
+    （lombok / spring-boot-starter-test），因此继承是安全的。
+
+    在此重复声明只会带来版本漂移风险，故不重复。
+    验证方式：mvn -f framework/framework-bom/pom.xml help:effective-pom
+  -->
+</project>

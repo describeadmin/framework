@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.describeadmin</groupId>
+    <artifactId>framework-parent</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>framework-mybatis-starter</artifactId>
+
+  <name>describeadmin :: framework-mybatis-starter</name>
+  <description>BaseEntity / BaseService 等泛型基类，封装分页、审计字段与逻辑删除</description>
+
+  <!--
+    ⚠️ 本模块【不得】引入任何 JDBC 驱动，含 runtime scope。
+    驱动由业务方在自己的 pom.xml 中声明（develop_plan.md 2.3.2）。
+    父 POM 的 maven-enforcer-plugin 已从构建期堵死这条，此处再记一次以免有人绕过。
+  -->
+  <dependencies>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+    </dependency>
+
+    <!--
+      分页插件所需。
+
+      ⚠️ 易踩的坑：MyBatis-Plus 自 3.5.9 起把 JSqlParser 改为可选依赖，
+      PaginationInnerInterceptor 随之从 mybatis-plus-extension 迁到了本制品。
+      只引 mybatis-plus-spring-boot3-starter 会得到
+      "找不到符号: 类 PaginationInnerInterceptor" 的编译错误。
+
+      实测依据：mybatis-plus-extension-3.5.3.x.jar 中仍含该类，
+      而 3.5.12+ 中该类位于 mybatis-plus-jsqlparser。
+    -->
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-jsqlparser</artifactId>
+    </dependency>
+    <!--
+      BaseController 需要 @GetMapping 等注解（位于 spring-web）。
+      声明为 optional：只用 ORM 不写 Controller 的业务方不应被拖进 Web 依赖；
+      继承 BaseController 的业务方必然已经引入了 framework-web-starter。
+    -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-web</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-configuration-processor</artifactId>
+      <optional>true</optional>
+    </dependency>
+  </dependencies>
+</project>
