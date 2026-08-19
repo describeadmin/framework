@@ -1,5 +1,6 @@
 package io.github.describeadmin.mybatis.api;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.PageQuery;
@@ -12,6 +13,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Map;
 
 /**
  * Controller 基类，提供标准 CRUD 端点。
@@ -36,9 +40,36 @@ public abstract class BaseController<S extends BaseService<M, T>,
      */
     protected abstract S getService();
 
+    /**
+     * 分页列表。
+     *
+     * <p>筛选条件由 {@link #buildListWrapper(Map)} 决定，默认不筛选。
+     *
+     * <p><b>为什么把原始参数整体接进来，而不是让子类各自声明 {@code @RequestParam}</b>：
+     * 子类若声明一个签名不同的 {@code list(...)} 并标 {@code @GetMapping}，
+     * 它<b>不是覆写而是重载</b>，于是同一个 {@code GET} 路径上出现两个映射，
+     * Spring 启动时直接报 Ambiguous mapping。留一个签名固定的入口 + 一个覆写点，
+     * 从结构上杜绝这种写法（本项目实测踩过）。
+     */
     @GetMapping
-    public Result<PageResult<T>> list(PageQuery query) {
-        return Result.ok(getService().page(query));
+    public Result<PageResult<T>> list(PageQuery query,
+                                      @RequestParam(required = false) Map<String, String> params) {
+        return Result.ok(getService().page(query, buildListWrapper(
+                params == null ? Map.of() : params)));
+    }
+
+    /**
+     * 构造列表查询的筛选条件。默认不筛选。
+     *
+     * <p>子类覆写本方法即可支持条件查询；codegen 会按 spec 里的 {@code query} 字段
+     * 自动生成实现。参数是原始查询串（含 {@code current}/{@code size}，忽略即可），
+     * 类型转换由子类负责——框架不知道每个字段该转成什么。
+     *
+     * @param params 请求的全部查询参数，不为 null
+     * @return 筛选条件；返回 {@code null} 表示不筛选
+     */
+    protected Wrapper<T> buildListWrapper(Map<String, String> params) {
+        return null;
     }
 
     @GetMapping("/{id}")
