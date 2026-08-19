@@ -51,6 +51,7 @@
     <module>framework-web-starter</module>
     <module>framework-security-starter</module>
     <module>framework-mybatis-starter</module>
+    <module>framework-system-starter</module>
   </modules>
 
   <properties>
@@ -156,6 +157,11 @@
       <dependency>
         <groupId>io.github.describeadmin</groupId>
         <artifactId>framework-mybatis-starter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.describeadmin</groupId>
+        <artifactId>framework-system-starter</artifactId>
         <version>${project.version}</version>
       </dependency>
 

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
   username     VARCHAR(64)  NOT NULL                COMMENT '登录名',
   password     VARCHAR(100) NOT NULL                COMMENT '密码（BCrypt 哈希）',
   nickname     VARCHAR(64)      NULL                COMMENT '昵称',
+  dept_id      BIGINT           NULL                COMMENT '所属部门ID',
   status       TINYINT      NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
   create_by    BIGINT           NULL                COMMENT '创建人',
   create_time  DATETIME         NULL                COMMENT '创建时间',
@@ -101,3 +102,24 @@ CREATE TABLE IF NOT EXISTS sys_role_menu (
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_general_ci
   COMMENT='角色菜单关联';
+
+CREATE TABLE IF NOT EXISTS sys_dept (
+  id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
+  parent_id    BIGINT      NOT NULL DEFAULT 0      COMMENT '父部门ID，0为根',
+  dept_name    VARCHAR(64) NOT NULL                COMMENT '部门名称',
+  leader       VARCHAR(64)     NULL                COMMENT '负责人',
+  phone        VARCHAR(32)     NULL                COMMENT '联系电话',
+  sort         INT         NOT NULL DEFAULT 0      COMMENT '排序',
+  status       TINYINT     NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
+  create_by    BIGINT          NULL                COMMENT '创建人',
+  create_time  DATETIME        NULL                COMMENT '创建时间',
+  update_by    BIGINT          NULL                COMMENT '更新人',
+  update_time  DATETIME        NULL                COMMENT '更新时间',
+  deleted      TINYINT     NOT NULL DEFAULT 0      COMMENT '逻辑删除',
+  version      INT         NOT NULL DEFAULT 0      COMMENT '乐观锁版本号',
+  PRIMARY KEY (id),
+  KEY idx_sys_dept_parent (parent_id)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='部门';

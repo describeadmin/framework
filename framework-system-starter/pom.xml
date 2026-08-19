@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.describeadmin</groupId>
+    <artifactId>framework-parent</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>framework-system-starter</artifactId>
+
+  <name>describeadmin :: framework-system-starter</name>
+  <description>系统管理：用户、角色、菜单、部门，以及登录与权限接口</description>
+
+  <!--
+    本模块与其他 framework-* 的定位差异，值得说明清楚：
+
+    framework-common / web / security / mybatis 提供的是【技术能力】；
+    本模块提供的是【管理后台的公共业务底座】—— 用户、角色、菜单、部门。
+
+    这不违反"框架与业务解耦"：系统管理不是某个部门的业务，而是所有管理后台都要有的
+    公共能力。把它放进框架、版本化发布，业务方才能通过升版本拿到修复；
+    若让每个业务方自己实现一遍，框架永远修不了他们的代码 —— 那正是
+    develop_plan.md 目标 #5（可持续升级）要避免的"升级=重写"。
+
+    真正的业务功能仍由业务方自己编写，框架不介入。
+  -->
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-mybatis-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-security-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-web-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-configuration-processor</artifactId>
+      <optional>true</optional>
+    </dependency>
+  </dependencies>
+</project>

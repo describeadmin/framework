@@ -55,3 +55,9 @@ WHERE r.role_code = 'ADMIN' AND r.deleted = 0 AND m.deleted = 0
   AND NOT EXISTS (
     SELECT 1 FROM sys_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id
   );
+
+-- 根部门
+INSERT INTO sys_dept (parent_id, dept_name, leader, sort, status, create_time, update_time, deleted, version)
+SELECT 0, '总部', '管理员', 1, 1, NOW(), NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_dept WHERE dept_name = '总部' AND parent_id = 0 AND deleted = 0);
