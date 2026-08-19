@@ -30,8 +30,8 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     /**
      * 指定用户可见的菜单树（前端路由用）。
      *
-     * <p>只返回目录与菜单，不含按钮——按钮属于权限点，前端通过
-     * {@code /api/auth/permissions} 单独获取，用于控制按钮显隐。
+     * <p>只返回目录与菜单，不含按钮——按钮属于权限点，随 {@code /api/auth/me}
+     * 的 permissions 字段下发，前端据此控制按钮显隐。
      */
     public List<SysMenu> treeOf(Long userId) {
         Set<Long> allowed = Set.copyOf(relationMapper.selectMenuIdsByUserId(userId));
