@@ -24,6 +24,24 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
+    <!--
+      认证/授权失败时要返回 Result JSON 而不是跳转登录页，需要序列化能力。
+      只引 databind，不引 spring-boot-starter-web —— 本 starter 不应替业务方决定 Web 技术栈。
+      版本由 spring-boot-dependencies 仲裁，保持 Jackson 2.x（CLAUDE.md 1）。
+    -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <!--
+      Servlet API 由容器（Tomcat）在运行期提供，此处仅编译期需要，故 provided。
+      写成 compile 会把一份 servlet-api 打进业务方的 fat jar，与容器自带的冲突。
+    -->
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-configuration-processor</artifactId>

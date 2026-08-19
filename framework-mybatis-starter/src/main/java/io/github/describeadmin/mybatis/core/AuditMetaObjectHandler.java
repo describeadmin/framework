@@ -1,6 +1,7 @@
 package io.github.describeadmin.mybatis.core;
 
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
+import io.github.describeadmin.common.api.CurrentUserProvider;
 import org.apache.ibatis.reflection.MetaObject;
 
 import java.time.LocalDateTime;

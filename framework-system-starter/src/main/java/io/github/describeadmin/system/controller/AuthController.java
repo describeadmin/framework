@@ -1,16 +1,24 @@
 package io.github.describeadmin.system.controller;
 
+import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
+import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.security.api.AuthRequest;
+import io.github.describeadmin.security.api.LoginResult;
 import io.github.describeadmin.security.api.LoginUser;
+import io.github.describeadmin.security.api.TokenStore;
+import io.github.describeadmin.security.autoconfigure.FrameworkSecurityProperties;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
+import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.service.SysMenuService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -28,10 +36,17 @@ public class AuthController {
 
     private final AuthProviderRegistry registry;
     private final SysMenuService menuService;
+    private final TokenStore tokenStore;
+    private final FrameworkSecurityProperties securityProperties;
 
-    public AuthController(AuthProviderRegistry registry, SysMenuService menuService) {
+    public AuthController(AuthProviderRegistry registry,
+                          SysMenuService menuService,
+                          TokenStore tokenStore,
+                          FrameworkSecurityProperties securityProperties) {
         this.registry = registry;
         this.menuService = menuService;
+        this.tokenStore = tokenStore;
+        this.securityProperties = securityProperties;
     }
 
     /**
@@ -53,14 +68,58 @@ public class AuthController {
      * 因此新增登录方式不需要改本接口的签名。
      */
     @PostMapping("/login")
-    public Result<LoginUser> login(@RequestBody Map<String, Object> body) {
+    public Result<LoginResult> login(@RequestBody Map<String, Object> body) {
         String type = String.valueOf(body.getOrDefault("type", "password"));
-        return Result.ok(registry.authenticate(new AuthRequest(type, body)));
+        LoginUser user = registry.authenticate(new AuthRequest(type, body));
+        String token = tokenStore.issue(user);
+        return Result.ok(new LoginResult(
+                token, securityProperties.getTokenTtl().toSeconds(), user));
     }
 
-    /** 指定用户的菜单树，供前端生成动态路由。 */
+    /**
+     * 登出：吊销当前令牌。
+     *
+     * <p>吊销的是<b>请求头里带的那一个</b>令牌，而不是该用户的全部令牌——
+     * 用户在手机上登出不应该把电脑上的会话也踢掉。
+     * 需要「全端下线」语义时用 {@code TokenStore.revokeAllOf(userId)}。
+     */
+    @PostMapping("/logout")
+    public Result<Void> logout(HttpServletRequest request) {
+        String token = TokenAuthenticationFilter.extractToken(request);
+        if (token != null) {
+            tokenStore.revoke(token);
+        }
+        SecurityContextHolder.clearContext();
+        return Result.ok();
+    }
+
+    /**
+     * 当前登录用户。
+     *
+     * <p>前端刷新页面后用它恢复用户信息与权限，不必把这些持久化在浏览器里——
+     * 存在前端的权限集合是不可信的，每次都回源才是对的。
+     */
+    @GetMapping("/me")
+    public Result<LoginUser> me() {
+        return Result.ok(currentUser());
+    }
+
+    /**
+     * 当前登录用户的菜单树，供前端生成动态路由。
+     *
+     * <p>用户 ID 取自登录态而非请求参数——之前的实现让调用方传 {@code userId}，
+     * 那等于任何登录用户都能拿到别人的菜单树，是一个越权读取。
+     */
     @GetMapping("/menus")
-    public Result<List<SysMenu>> menus(@RequestParam Long userId) {
-        return Result.ok(menuService.treeOf(userId));
+    public Result<List<SysMenu>> menus() {
+        return Result.ok(menuService.treeOf(currentUser().getUserId()));
+    }
+
+    private LoginUser currentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof LoginUser user)) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        return user;
     }
 }

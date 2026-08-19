@@ -3,7 +3,9 @@ package io.github.describeadmin.mybatis.autoconfigure;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import io.github.describeadmin.common.api.CurrentUserProvider;
 import io.github.describeadmin.mybatis.core.AuditMetaObjectHandler;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -35,9 +37,18 @@ public class FrameworkMybatisAutoConfiguration {
         return interceptor;
     }
 
+    /**
+     * 审计字段填充器。
+     *
+     * <p>用 {@code ObjectProvider} 而非直接注入：{@link CurrentUserProvider} 是可选的——
+     * 引入了 framework-security-starter 才有实现，只用 ORM 的业务方没有。
+     * 缺失时退回 {@link CurrentUserProvider#NOOP}，创建人/更新人留空而不是启动失败。
+     */
     @Bean
     @ConditionalOnMissingBean
-    public AuditMetaObjectHandler auditMetaObjectHandler() {
-        return new AuditMetaObjectHandler();
+    public AuditMetaObjectHandler auditMetaObjectHandler(
+            ObjectProvider<CurrentUserProvider> currentUserProvider) {
+        return new AuditMetaObjectHandler(
+                currentUserProvider.getIfAvailable(() -> CurrentUserProvider.NOOP));
     }
 }
