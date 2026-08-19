@@ -32,20 +32,184 @@ WHERE u.username = 'admin' AND u.deleted = 0
     SELECT 1 FROM sys_user_role ur WHERE ur.user_id = u.id AND ur.role_id = r.id
   );
 
--- 演示菜单：系统管理 / 部门管理，用于 5.4 节的结构化测试用例
+-- -----------------------------------------------------------------------------
+-- 工作台
+--
+-- accessMode = backend 下，前端的静态路由模块不参与菜单生成，
+-- 首页也必须由菜单表下发，否则登录后会落到 404（实测踩过）。
+-- -----------------------------------------------------------------------------
+
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
                       create_time, update_time, deleted, version)
-SELECT 0, '系统管理', 'DIR', NULL, '/system', NULL, 'setting', 1, 1, NOW(), NOW(), 0, 0
+SELECT 0, '工作台', 'DIR', NULL, '/dashboard', 'BasicLayout', 'lucide:layout-dashboard', 0, 1,
+       NOW(), NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE path = '/dashboard' AND parent_id = 0 AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '概览', 'MENU', 'dashboard:view', '/dashboard/workbench', 'dashboard/index',
+       'lucide:gauge', 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.path = '/dashboard' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'dashboard:view' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 系统管理菜单树
+--
+-- 目录 → 菜单 → 按钮 三层。按钮层不是路由，而是权限点：它的 perm_code 会随
+-- /api/auth/me 下发给前端，前端用 v-access:code 控制按钮显隐。
+-- 因此「页面里有哪些按钮」和「谁能看到这些按钮」是同一份数据，不会各说各话。
+--
+-- component 填的是相对 src/views 的路径（不带 .vue），前端 generateRoutesByBackend
+-- 会用它到 import.meta.glob 的结果里查找组件。写错了会静默退化成 404 页面，
+-- 因此改动此列时必须同步确认对应的 .vue 文件存在。
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT 0, '系统管理', 'DIR', NULL, '/system', 'BasicLayout', 'lucide:settings', 1, 1, NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE menu_name = '系统管理' AND parent_id = 0 AND deleted = 0);
 
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
                       create_time, update_time, deleted, version)
-SELECT m.id, '部门管理', 'MENU', 'system:dept:list', '/system/dept', 'system/dept/index', 'apartment', 1, 1,
+SELECT m.id, '用户管理', 'MENU', 'system:user:list', '/system/user', 'system/user/index', 'lucide:users', 1, 1,
+       NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:user:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '角色管理', 'MENU', 'system:role:list', '/system/role', 'system/role/index', 'lucide:shield-check', 2, 1,
+       NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:role:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '菜单管理', 'MENU', 'system:menu:list', '/system/menu', 'system/menu/index', 'lucide:menu', 3, 1,
+       NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:menu:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '部门管理', 'MENU', 'system:dept:list', '/system/dept', 'system/dept/index', 'lucide:building-2', 4, 1,
        NOW(), NOW(), 0, 0
 FROM sys_menu m
 WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
   AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dept:list' AND deleted = 0);
+
+-- 按钮级权限点。path / component 为 NULL —— 它们不产生路由
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:user:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:user:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:user:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:user:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:user:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:user:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:user:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:user:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:user:remove' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '重置密码', 'BUTTON', 'system:user:reset-password', NULL, NULL, NULL, 4, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:user:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:user:reset-password' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '分配角色', 'BUTTON', 'system:user:assign-role', NULL, NULL, NULL, 5, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:user:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:user:assign-role' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:role:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:role:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:role:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:role:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:role:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:role:remove' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '分配菜单', 'BUTTON', 'system:role:assign-menu', NULL, NULL, NULL, 4, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:role:assign-menu' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:menu:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:menu:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:menu:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:menu:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:menu:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:menu:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:menu:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:menu:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:menu:remove' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:dept:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dept:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dept:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:dept:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dept:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dept:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:dept:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dept:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dept:remove' AND deleted = 0);
 
 -- ADMIN 角色授予全部菜单
 INSERT INTO sys_role_menu (role_id, menu_id)
