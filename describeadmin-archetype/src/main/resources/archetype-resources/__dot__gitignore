@@ -1,0 +1,31 @@
+# ---- 构建产物 ----
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---- 凭据（绝不能提交）----
+.env
+.env.*
+!.env.example
+*.gpg
+*.asc
+
+# ---- IDE ----
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+.settings/
+.project
+.classpath
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+
+# ---- 日志与临时文件 ----
+*.log
+logs/
+tmp/

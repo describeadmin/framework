@@ -7,6 +7,37 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
+## 0.1.1 (未发布)
+
+本版本只为交付业务方脚手架。**框架六个模块无任何功能变更**，
+随 archetype 一起走版本线，是为了让"archetype 的版本 == 它生成的工程引用的框架版本"
+这条约定成立——archetype 的版本号在构建期由 `${project.version}` 写死进生成物。
+
+### Breaking Changes
+
+无。
+
+### New Features
+
+**describeadmin-archetype** — 业务方工程脚手架（方案 9.2.2）
+
+- `mvn archetype:generate` 一条命令生成**没有业务模块、但可直接登录**的工程，
+  不再需要"以 `sample-app` 为起点复制后删掉示例模块"
+- 生成物 6 个文件，不含任何 SQL：RBAC 的建表与种子脚本在
+  `framework-system-starter` 的 jar 里，通过 `classpath:` 引用
+- 把两个已实测的接入坑固化为默认正确状态：`mysql.version=8.2.0` 覆盖、
+  `spring.sql.init.encoding=UTF-8`
+- **刻意不生成 `maven-toolchains-plugin` 配置**：业务方只需 Maven 跑在 JDK 17+，
+  用哪个 JDK 构建由业务方自己决定；产物由 `release=17` 钉死
+- CI 新增 `archetype-e2e`：生成 → 用 JDK 17 构建 → 起真实 MySQL 5.7 → 登录 →
+  按字节核验中文
+
+### Bug Fixes
+
+无。
+
+---
+
 ## 0.1.0 (2026-08-20)
 
 首个公开版本。

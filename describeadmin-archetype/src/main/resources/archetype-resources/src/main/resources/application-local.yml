@@ -1,0 +1,53 @@
+# 本地开发用的 profile。
+#
+#   docker run -d --name da-mysql -p ${dbPort}:3306 \
+#     -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=${dbName} \
+#     -e MYSQL_USER=${dbUsername} -e MYSQL_PASSWORD=${dbPassword} \
+#     mysql:5.7 --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+#
+#   mvn spring-boot:run -Dspring-boot.run.profiles=local
+#
+# ⚠️ 仅供本地开发：默认账号 admin / admin123，且每次启动都会重放建表与种子脚本。
+#    真实环境请另建 application-dev.yml / application-prod.yml，
+#    并把 spring.sql.init.mode 设为 never。
+
+server:
+  port: ${serverPort}
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:${dbPort}/${dbName}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    username: ${dbUsername}
+    password: ${dbPassword}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  sql:
+    init:
+      mode: always
+      # schema-rbac.sql / seed-rbac.sql 来自 framework-system-starter 这个 jar，
+      # 你的工程里没有、也不需要有这两个文件。
+      #
+      # 用 codegen 生成业务模块后，把它产出的两个 SQL 追加到这两行末尾：
+      #   schema-locations: ...,classpath:db/schema-biz_xxx.sql
+      #   data-locations:   ...,classpath:db/menu-biz_xxx.sql
+      # 漏掉 menu-*.sql 的症状极具欺骗性：接口全通，但页面在侧边栏里根本不出现
+      # —— 菜单是后端 sys_menu 表下发的。
+      schema-locations: classpath:db/schema-rbac.sql
+      data-locations: classpath:db/seed-rbac.sql
+      # ⚠️ 这一行【不能删】。
+      # 不写的话 Spring 用【平台默认编码】读 SQL 脚本，中文 Windows 上是 GBK，
+      # 会把 UTF-8 脚本读坏 —— 库里中文全是乱码，而 COUNT(*) 校验完全正常，
+      # 环境看起来非常健康，等发现时已经排查很久了。
+      encoding: UTF-8
+
+describeadmin:
+  security:
+    # 令牌有效期。本地调试放长一点，免得开着调试器就过期了
+    token-ttl: 12h
+    # allowed-origins 刻意留空：开发期走前端 dev server 的代理，从根本上不产生跨域，
+    # 也就不存在「开发期放开的 CORS 被带上生产」这类事故
+
+logging:
+  level:
+    ${package}: DEBUG
+    io.github.describeadmin: DEBUG

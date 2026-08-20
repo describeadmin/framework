@@ -61,3 +61,118 @@ jobs:
           name: framework-jars
           path: '*/target/*.jar'
           retention-days: 7
+
+  archetype-e2e:
+    name: 脚手架端到端（生成 → JDK 17 构建 → 登录）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 先用 JDK 21 装框架与 archetype 到本地仓库
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: 安装框架与 archetype
+        run: mvn -B clean install -DskipTests
+
+      - name: 读取版本号
+        id: ver
+        run: echo "v=$(mvn -B -q -DforceStdout -Dexpression=project.version help:evaluate)" >> "$GITHUB_OUTPUT"
+
+      # 之后一律用 JDK 17：脚手架对业务方的承诺就是「Maven 跑在 17+ 即可，不需要 toolchains」。
+      # 这一步换 JDK 本身就是那条承诺的证明 —— 换成 21 也应当照样通过。
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: 起 MySQL 5.7
+        run: |
+          # 不用 services: 服务容器传不了 --character-set-server 这类启动参数，
+          # 而字符集必须显式给，不能依赖服务器默认值（5.7 与 8.0 默认值不同）
+          docker run -d --name da-mysql -p 3306:3306 \
+            -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=describeadmin \
+            -e MYSQL_USER=app -e MYSQL_PASSWORD=app \
+            mysql:5.7 --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+          # 就绪判断必须用【带认证的查询】：5.7 初始化期间的临时服务器会让 ping 立刻成功，
+          # 但此时 root 口令还没设置
+          for i in $(seq 1 60); do
+            docker exec da-mysql mysql -uroot -proot -e 'SELECT 1' >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec da-mysql mysql -uroot -proot -e 'SELECT 1' >/dev/null
+
+      - name: 生成工程
+        run: |
+          mkdir -p /tmp/gen && cd /tmp/gen
+          mvn -B org.apache.maven.plugins:maven-archetype-plugin:3.4.1:generate \
+            -DarchetypeGroupId=io.github.describeadmin \
+            -DarchetypeArtifactId=describeadmin-archetype \
+            -DarchetypeVersion=${{ steps.ver.outputs.v }} \
+            -DgroupId=com.example.ci -DartifactId=ci-app -Dversion=1.0.0-SNAPSHOT \
+            -Dpackage=com.example.ci.app -DdbPort=3306
+
+      - name: 校验生成物的完整性
+        run: |
+          set -e
+          cd /tmp/gen/ci-app
+          fail=0
+
+          # 点文件：Maven 的默认排除规则会把 .gitignore 悄悄丢掉（.gitattributes 不受影响），
+          # 源文件因此命名为 __dot__gitignore。少了不报错，只能靠这里守
+          for f in .gitignore .gitattributes README.md pom.xml; do
+            [ -f "$f" ] || { echo "::error::生成物缺少 $f"; fail=1; }
+          done
+
+          # Velocity 把行首 ## 当作单行注释：README 的二级标题会整行消失且不报错
+          n=$(grep -c '^## ' README.md || true)
+          [ "$n" -ge 5 ] || { echo "::error::README.md 只剩 $n 个二级标题，疑似被 Velocity 吃掉"; fail=1; }
+
+          # 未被替换的变量。唯一允许留下的是 ${describeadmin.version} —— 那是给 Maven 用的
+          leftover=$(grep -rn '\${' . --exclude-dir=target | grep -v 'describeadmin\.version' || true)
+          [ -z "$leftover" ] || { echo "::error::生成物里有未替换的变量：$leftover"; fail=1; }
+
+          grep -q '<mysql.version>8.2.0</mysql.version>' pom.xml \
+            || { echo "::error::pom.xml 缺少 mysql.version 覆盖，连 MySQL 5.7 会直接失败"; fail=1; }
+          grep -q 'encoding: UTF-8' src/main/resources/application-local.yml \
+            || { echo "::error::application-local.yml 缺少 spring.sql.init.encoding"; fail=1; }
+
+          exit $fail
+
+      - name: 构建并启动
+        run: |
+          cd /tmp/gen/ci-app
+          mvn -B package
+          nohup java -jar target/ci-app-1.0.0-SNAPSHOT.jar --spring.profiles.active=local > /tmp/app.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null -m 2 http://localhost:8090/api/auth/login && break
+            sleep 2
+          done
+
+      - name: 登录并按【字节】核验中文
+        run: |
+          set -e
+          curl -s -X POST http://localhost:8090/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"admin123"}' > /tmp/login.json
+          python3 - <<'EOF'
+          import json, sys
+          d = json.load(open('/tmp/login.json', encoding='utf-8'))
+          assert d['code'] == 0, d
+          u = d['data']['user']
+          assert d['data']['token'], '令牌为空'
+          # 不看控制台渲染 —— 终端代码页会把好数据显示成乱码，也会把坏数据显示成正常。
+          # 只认字节：这是唯一能查出 spring.sql.init.encoding 缺失的办法
+          assert u['nickname'].encode('utf-8').hex() == 'e8b685e7baa7e7aea1e79086e59198', u['nickname']
+          assert 'ADMIN' in u['roles'], u['roles']
+          assert len(u['permissions']) >= 20, len(u['permissions'])
+          print('✓ 登录、RBAC、中文编码均正确')
+          EOF
+
+      - name: 失败时打印应用日志
+        if: failure()
+        run: tail -100 /tmp/app.log || true

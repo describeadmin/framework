@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  脚手架描述符：告诉 archetype 插件"哪些文件要做变量替换、哪些要落进包目录"。
+
+  注意 ${project.version} 会在【构建期】被资源过滤替换成本模块的版本号（见本模块 pom.xml），
+  因此 archetype 的版本与它生成的工程所引用的框架版本天然一致，不存在手工同步的窗口。
+-->
+<archetype-descriptor
+    xmlns="https://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.1.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.1.0 https://maven.apache.org/xsd/archetype-descriptor-1.1.0.xsd"
+    name="describeadmin"
+    partial="false">
+
+  <requiredProperties>
+    <!--
+      仅用于把 __dot__gitignore 这个文件名还原成 .gitignore。
+
+      为什么要绕这一圈：Maven 的默认排除规则里有 **/.gitignore（.gitattributes 不在其中），
+      它在 archetype 打 jar 那一步生效，文件根本进不了制品 —— 而 maven-resources-plugin 的
+      addDefaultExcludes 只管到 target/classes，管不到打包。文件名里的 __属性__ 会被生成器替换，
+      因此把源文件命名为 __dot__gitignore 是唯一不用改插件行为的办法。
+
+      有默认值的属性【不会】在交互模式下提问（archetype:generate 的 askForDefaultPropertyValues
+      默认为 false），所以这个内部用的属性不会打扰使用者。
+    -->
+    <requiredProperty key="dot">
+      <defaultValue>.</defaultValue>
+    </requiredProperty>
+
+    <!-- 框架版本。默认值即本 archetype 的版本；想用更新的框架版本时可 -DdescribeadminVersion= 覆盖 -->
+    <requiredProperty key="describeadminVersion">
+      <defaultValue>${project.version}</defaultValue>
+    </requiredProperty>
+
+    <!-- 启动类类名。文件名 __appClassName__.java 会一并替换 -->
+    <requiredProperty key="appClassName">
+      <defaultValue>Application</defaultValue>
+    </requiredProperty>
+
+    <!-- 8080 在开发机上极易与其他项目撞车，本地默认用 8090，与前端 dev server 的代理目标一致 -->
+    <requiredProperty key="serverPort">
+      <defaultValue>8090</defaultValue>
+    </requiredProperty>
+
+    <!-- 本地 MySQL 端口。3307 是为了不和机器上已有的 3306 撞车（QUICKSTART §2） -->
+    <requiredProperty key="dbPort">
+      <defaultValue>3307</defaultValue>
+    </requiredProperty>
+    <requiredProperty key="dbName">
+      <defaultValue>describeadmin</defaultValue>
+    </requiredProperty>
+    <requiredProperty key="dbUsername">
+      <defaultValue>app</defaultValue>
+    </requiredProperty>
+    <requiredProperty key="dbPassword">
+      <defaultValue>app</defaultValue>
+    </requiredProperty>
+  </requiredProperties>
+
+  <fileSets>
+    <!-- packaged=true：落到 src/main/java/<用户包路径>/ 下，包目录由 -Dpackage 现场创建 -->
+    <fileSet filtered="true" packaged="true" encoding="UTF-8">
+      <directory>src/main/java</directory>
+      <includes>
+        <include>**/*.java</include>
+      </includes>
+    </fileSet>
+
+    <fileSet filtered="true" encoding="UTF-8">
+      <directory>src/main/resources</directory>
+      <includes>
+        <include>**/*.yml</include>
+      </includes>
+    </fileSet>
+
+    <!--
+      根目录下的点文件与 README，【刻意不过滤】。
+
+      过滤走的是 Velocity，而 Velocity 把行首的 ## 当作单行注释 ——
+      README.md 里的每一个 markdown 二级标题都会被整行吃掉，且不报任何错。
+      这三个文件本来也不需要变量替换，直接关掉过滤是最省事的做法。
+      （真要在 markdown 里用变量，得把内容包进 Velocity 的 #[[ ]]# 未解析块。）
+
+      pom.xml 不用在这里列 —— archetype 插件总是单独处理它。
+    -->
+    <fileSet encoding="UTF-8">
+      <directory></directory>
+      <includes>
+        <include>README.md</include>
+        <include>__dot__gitignore</include>
+        <include>.gitattributes</include>
+      </includes>
+    </fileSet>
+  </fileSets>
+</archetype-descriptor>

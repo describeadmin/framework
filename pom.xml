@@ -15,7 +15,7 @@
 
   <groupId>io.github.describeadmin</groupId>
   <artifactId>framework-parent</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <packaging>pom</packaging>
 
   <name>describeadmin :: framework-parent</name>
@@ -52,6 +52,12 @@
     <module>framework-security-starter</module>
     <module>framework-mybatis-starter</module>
     <module>framework-system-starter</module>
+
+    <!--
+      业务方工程脚手架。放在最后：它不参与框架的依赖图，只是与框架同版本发布的一个模板产物。
+      版本必须与框架一致 —— 它生成的 POM 里写的就是框架版本（develop_plan.md 9.2.2）。
+    -->
+    <module>describeadmin-archetype</module>
   </modules>
 
   <properties>

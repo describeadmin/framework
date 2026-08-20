@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    业务方工程脚手架（develop_plan.md 9.2.2）。
+
+    它交付的不是"少敲几行 XML"，而是把两个【已实测的接入坑】固化成默认正确的初始状态：
+      1. mysql-connector-j 版本被父 POM 的 dependencyManagement 覆盖 → 连 MySQL 5.7 直接失败
+      2. spring.sql.init.encoding 缺省 → 平台默认编码读脚本，中文全乱码而 COUNT(*) 正常
+
+    与框架同仓、同版本发布：生成的 POM 里写的就是本模块的版本号（见 archetype-metadata.xml
+    的 describeadminVersion 默认值 ${project.version}），两者必须同步，不允许各自演进。
+
+    ⚠️ 本模块【刻意不配 maven-toolchains-plugin 到生成物里】。
+       框架自身构建要求 JDK 21，那是框架的事；业务方只需要 Maven 跑在 JDK 17+，
+       用哪个发行版、哪个大版本是业务方的自由。见本模块 README.md「为什么不生成 toolchains 配置」。
+  -->
+
+  <parent>
+    <groupId>io.github.describeadmin</groupId>
+    <artifactId>framework-parent</artifactId>
+    <version>0.1.1</version>
+  </parent>
+
+  <artifactId>describeadmin-archetype</artifactId>
+  <packaging>maven-archetype</packaging>
+
+  <name>describeadmin :: archetype</name>
+  <description>业务方后端工程脚手架 —— mvn archetype:generate 一条命令得到可登录的空工程</description>
+
+  <properties>
+    <maven-archetype.version>3.4.1</maven-archetype.version>
+    <!-- 3.x 线的最新稳定版；4.0.0-beta-1 是预发布版，按项目约定不用 -->
+    <maven-resources-plugin.version>3.5.0</maven-resources-plugin.version>
+  </properties>
+
+  <build>
+    <!--
+      packaging=maven-archetype 需要这个 extension 提供生命周期映射，
+      没有它 Maven 会报 "Unknown packaging: maven-archetype"。
+    -->
+    <extensions>
+      <extension>
+        <groupId>org.apache.maven.archetype</groupId>
+        <artifactId>archetype-packaging</artifactId>
+        <version>${maven-archetype.version}</version>
+      </extension>
+    </extensions>
+
+    <!--
+      资源过滤的边界是本模块最容易出错的地方，两个目录必须【区别对待】：
+
+        META-INF/maven/**   → 过滤。让 archetype-metadata.xml 里的 ${project.version}
+                              在【构建期】被替换成真实版本号
+        archetype-resources/** → 绝不过滤。它是给用户的模板，里面的 ${...} 要留到
+                              【生成期】由 Velocity 处理；这里过滤掉就等于把模板提前掏空
+
+      另见下方 maven-resources-plugin 的 addDefaultExcludes=false —— 它是为了让
+      .gitignore / .gitattributes 进得了 jar：Maven 的默认排除规则会把这类点文件悄悄丢掉，
+      而 develop_plan.md 发现 ⑫ 要求生成物必须带 .gitattributes
+      （多仓协作下换行符不统一会产生整文件 diff）。
+      注意 addDefaultExcludes 只能配在插件上，配进 <resource> 里 Maven 会直接报
+      "Unrecognised tag"。
+    -->
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes>
+          <include>META-INF/maven/**</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>false</filtering>
+        <excludes>
+          <exclude>META-INF/maven/**</exclude>
+        </excludes>
+      </resource>
+    </resources>
+
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-archetype-plugin</artifactId>
+          <version>${maven-archetype.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>${maven-resources-plugin.version}</version>
+        <configuration>
+          <!-- 见上方注释：不关掉的话 .gitignore / .gitattributes 进不了 jar -->
+          <addDefaultExcludes>false</addDefaultExcludes>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

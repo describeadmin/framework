@@ -11,7 +11,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 
 ```xml
 <properties>
-  <describeadmin.version>0.1.0</describeadmin.version>
+  <describeadmin.version>0.1.1</describeadmin.version>
   <!-- ⚠️ 必须显式声明，见下文「驱动版本」 -->
   <mysql.version>8.2.0</mysql.version>
 </properties>
@@ -29,8 +29,18 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 </dependencyManagement>
 ```
 
-> 别手写这份 POM。以 [sample-app](https://github.com/describeadmin/sample-app)
-> 为起点——它已经把三个已实测的接入坑固化成默认正确的状态。
+> 别手写这份 POM，用脚手架生成——它已经把两个已实测的接入坑固化成默认正确的状态：
+>
+> ```bash
+> mvn archetype:generate -B \
+>   -DarchetypeGroupId=io.github.describeadmin \
+>   -DarchetypeArtifactId=describeadmin-archetype \
+>   -DarchetypeVersion=0.1.1 \
+>   -DgroupId=com.acme -DartifactId=my-server -Dpackage=com.acme.myserver
+> ```
+>
+> 生成的是**没有业务模块、但可直接登录**的工程，没有任何东西需要事后删除。
+> 模板本身见 [`describeadmin-archetype/`](describeadmin-archetype/)。
 
 ## 模块
 
@@ -41,7 +51,8 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 | `framework-web-starter` | traceId 贯穿请求与日志 |
 | `framework-security-starter` | 不透明令牌认证、`AuthProvider` / `TokenStore` SPI、按钮级权限 |
 | `framework-mybatis-starter` | `BaseEntity` / `BaseService` / `BaseController` 基类，审计字段与逻辑删除 |
-| `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门管理 |
+| `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门管理（含建表与种子 SQL） |
+| `describeadmin-archetype` | 业务方工程脚手架，与框架同版本发布 |
 
 ## 两条容易被"顺手升级"掉的约定
 
