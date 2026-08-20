@@ -1,12 +1,16 @@
 package io.github.describeadmin.security.core;
 
+import io.github.describeadmin.security.api.ActiveSession;
 import io.github.describeadmin.security.api.LoginUser;
 import io.github.describeadmin.security.api.TokenStore;
 
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -55,7 +59,8 @@ public class InMemoryTokenStore implements TokenStore {
         RANDOM.nextBytes(raw);
         String token = ENCODER.encodeToString(raw);
 
-        tokens.put(token, new Entry(user, Instant.now().plus(ttl)));
+        Instant now = Instant.now();
+        tokens.put(token, new Entry(user, now, now.plus(ttl)));
         if (issueCount.incrementAndGet() % SWEEP_INTERVAL == 0) {
             sweepExpired();
         }
@@ -102,6 +107,26 @@ public class InMemoryTokenStore implements TokenStore {
         return removed[0];
     }
 
+    @Override
+    public List<ActiveSession> listActive() {
+        Instant now = Instant.now();
+        List<ActiveSession> sessions = new ArrayList<>();
+        for (Entry entry : tokens.values()) {
+            // 不返回已过期但尚未被清理掉的条目——惰性清理意味着它们可能还在 map 里，
+            // 但它们已经不能用于认证，列进"在线用户"会让管理员看到并不存在的会话
+            if (entry.expiresAt().isBefore(now)) {
+                continue;
+            }
+            LoginUser user = entry.user();
+            sessions.add(new ActiveSession(user.getUserId(), user.getUsername(),
+                    user.getNickname(), user.getAuthType(),
+                    entry.issuedAt(), entry.expiresAt()));
+        }
+        // 最近登录的排在前面，这是管理页面唯一有意义的默认顺序
+        sessions.sort(Comparator.comparing(ActiveSession::getIssuedAt).reversed());
+        return sessions;
+    }
+
     /** 当前有效令牌数，供测试与监控使用。 */
     public int size() {
         sweepExpired();
@@ -113,6 +138,6 @@ public class InMemoryTokenStore implements TokenStore {
         tokens.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(now));
     }
 
-    private record Entry(LoginUser user, Instant expiresAt) {
+    private record Entry(LoginUser user, Instant issuedAt, Instant expiresAt) {
     }
 }

@@ -7,6 +7,132 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
+## 0.2.0-SNAPSHOT (开发中)
+
+补齐一批"缺了不能上生产"的能力：服务端权限点校验、登录失败锁定、在线用户与强制下线，
+并为插件化补上两个必要的挂载点（拦截器链扩展缝、可替换的缓存后端）。
+
+此前权限点只下发给前端用于按钮显隐，
+**服务端对所有非白名单接口一律只要求"已认证"**——任何能登录的账号
+直接构造 HTTP 请求即可调用任何接口。界面看起来是受控的，实际并不受控。
+
+### Breaking Changes
+
+- **接口现在会真正校验权限点**。升级后，此前"能登录就能调"的接口将对
+  未被授权的账号返回 403。`seed-rbac.sql` 已把全部权限点授予 `ADMIN`，
+  用内置管理员登录不受影响；其他角色需要按 `sys_role_menu` 补授权。
+  临时排查可用 `describeadmin.security.permission-enabled=false` 关闭，
+  但那等于回到"界面受控、接口不受控"的状态，不应用于生产。
+- `BaseController` 新增 `permPrefix()` 与 `requirePermission(String)` 两个
+  `protected` 方法。子类若已有同名方法会与之冲突。
+  构造函数签名未变，既有业务 Controller 无需改动。
+
+### New Features
+
+- `PermissionChecker`（`framework-common` 的 `api/` 包）—— 权限校验契约。
+  与 `CurrentUserProvider` 同一范式：接口在 common，实现由
+  framework-security-starter 注册，未引入时退回 `PERMIT_ALL`，
+  使 framework-mybatis-starter 不必依赖 Spring Security。
+- `SecurityContextPermissionChecker` —— 从 SecurityContext 读取权限点。
+  权限快照来自登录时刻，与 `/api/auth/me` 下发给前端的是同一份。
+- 启用 `@EnableMethodSecurity`，业务方可在自定义端点上用
+  `@PreAuthorize("hasAuthority('模块:对象:动作')")`。
+- `BaseController` 的五个通用端点自动校验权限点，前缀由 `@RequestMapping`
+  路径推导（`/api/system/user` → `system:user`），可覆写。
+- codegen 生成的 Controller 现在带 `permPrefix()` 显式覆写。
+- 新增配置项 `describeadmin.security.permission-enabled`（默认 `true`）。
+- 框架模块首次拥有单元测试；surefire 补上 `-Dfile.encoding=UTF-8`
+  （sample-app 早已配置，框架侧因此前无测试而一直空缺）。
+
+**framework-cache-starter** —— 新模块，缓存契约与零依赖内存实现
+
+- `CacheProvider`（`api/` 包）—— `put` / `get` / `evict` / `increment` 四个方法。
+  `increment` 单独给出而不是让调用方 get-then-put：后者在并发下丢计数，
+  而它最典型的用途正是登录失败计数，丢计数等于爆破防护被绕过。
+- `InMemoryCacheProvider` —— 无任何第三方依赖，与 `InMemoryTokenStore` 同一组取舍
+  （重启丢失、不支持多实例）。带容量上限（`describeadmin.cache.max-size`，默认 10000），
+  因为缓存键常含用户输入，无上限意味着任何人都能把堆撑爆。
+- 集中式实现（Redis 等）以插件形态提供，本模块自身不允许引入任何缓存中间件依赖，
+  由父 POM 的 enforcer 在构建期强制。
+
+**登录失败锁定**
+
+- 锁定窗口内连续失败达阈值后暂时拒绝该账号登录，使在线爆破从"受限于网络吞吐"
+  变成"受限于锁定窗口"。到期自动解锁，不需要管理员介入。
+- 对**不存在的账号同样计数**：只锁存在的账号会让"会不会被锁"成为账号枚举信道，
+  使登录链路里用 DUMMY_HASH 抹平响应耗时的努力失效。
+- 已知取舍：可被用于拒绝服务（知道用户名的人能故意锁住对方）。这是按用户名锁定的
+  固有代价，应对是把窗口设短并允许整体关闭。
+- 新增配置项 `describeadmin.security.lockout.{enabled,max-failures,duration}`
+  （默认 `true` / `5` / `15m`）。
+
+**在线用户与强制下线**
+
+- `TokenStore.listActive()` —— **`default` 方法**，默认返回空列表。写成抽象方法会让
+  所有已实现该接口的业务方直接编译失败；而确实存在无法枚举的实现（如把令牌委托给
+  外部统一认证中心的实现），它们保留默认行为即可。
+- `ActiveSession`（`api/` 包）—— 会话快照，**刻意不含令牌本身**：
+  令牌一旦出现在这个响应里，任何能打开在线用户页的人都可以拿它冒充当事人。
+- `GET /api/system/online`、`DELETE /api/system/online/{userId}`，
+  权限点 `system:online:list` / `system:online:remove`。
+- 种子数据新增对应菜单，**`visible = 0`**：后端已可用但前端页面尚未交付，
+  置 0 让权限点先就位而不在侧边栏生成一个点开就 404 的入口。前端落地后改成 1。
+
+**第一个可选插件已独立成仓**
+
+- `framework-cache-redis-starter`（把 `CacheProvider` 与 `TokenStore` 切到 Redis）
+  **不在本仓库**，见 [describeadmin/framework-cache-redis-starter](https://github.com/describeadmin/framework-cache-redis-starter)。
+  它有自己的版本线与 CHANGELOG。
+- 它是"能力可插拔"的第一个真实证据：不引它行为与从前完全一致，
+  引了它重启不掉线、多实例共享会话，而框架核心与业务代码一行都不用改。
+- ⚠️ **`framework-bom` 刻意不仲裁插件版本**。插件版本与框架版本无对应关系，
+  让 BOM 按 `${project.version}` 去解析插件，业务方会拿到一个根本不存在的制品，
+  而报错只说"找不到"，不会有任何东西指向 BOM。引插件时请显式写版本号。
+
+**插件版本兼容自检**
+
+- `FrameworkVersion`（`framework-common` 的 `api/` 包）—— 插件声明自己要求的最低框架版本，
+  在启动阶段校验，把"运行期某个请求里的 `NoSuchMethodError`"提前成"启动失败 + 一句可操作的信息"。
+  插件以 `provided` 依赖框架，**运行时的框架版本由业务方决定**，不是插件构建时那个。
+- 判定按风险区别对待：框架比要求的旧 → 启动失败；主版本不同 → 启动失败；
+  框架更新且主版本相同 → 只记 WARN（一律拒绝会让每个框架小版本都逼所有插件重发一遍）；
+  读不到版本 → 放行 + WARN（不能因为自检机制本身把应用挡在门外）。
+- 版本号来自 `META-INF/describeadmin-framework.properties`（Maven 资源过滤写入），
+  **不用 MANIFEST**：`Package.getImplementationVersion()` 只在从 jar 运行时有值，
+  在 IDE 与 surefire 里都是 null，那会让自检在开发期永远失效——
+  而开发期恰恰最该发现版本不匹配。
+
+**插件规范落地**
+
+- 新增 `docs/registry.md`：插件目录与准入规范。方案第八章此前只有一张登记表、
+  没有任何准入条款，且该文件并不存在。
+- 父 POM 的 enforcer 拆成两个 execution，`enforce-core-thin`（核心薄门禁）
+  可被插件模块单独关闭，而 JDBC 驱动与 Jackson 3 两条对插件同样生效。
+- `CLAUDE.md` 新增 4.6 节，含"跨模块 `@ConditionalOnMissingBean` 必须显式声明装配顺序"
+  这条最隐蔽的坑。
+
+**MyBatis 拦截器链扩展缝**
+
+- `MybatisPlusInterceptor` 改为收集容器里所有 `InnerInterceptor` Bean（按 `@Order` 升序），
+  统一排在框架自带的分页与乐观锁之前。此前插件想加拦截器只能整体覆盖这个 Bean，
+  代价是把分页配置逻辑复制一份，之后框架改了这里复制出去的那份不会跟着改。
+- 顺序不是随意定的：多租户、动态表名、数据权限这类**改写 SQL** 的拦截器必须先于分页，
+  否则分页的 count 语句基于未改写的 SQL 生成，会统计出被改写条件排除掉的行。
+
+### Bug Fixes
+
+- `AccessDeniedException` 此前会被 framework-web-starter 的
+  `@ExceptionHandler(Throwable.class)` 兜底吞掉，映射成 **HTTP 500 + code 50000**，
+  而不是 403。新增 `SecurityExceptionHandler`（`@Order(HIGHEST_PRECEDENCE)`）
+  显式接住，产出与 `ResultAuthenticationEntryPoint` 逐字一致的响应体。
+  这个缺陷此前不可见——没有任何代码会抛 `AccessDeniedException`。
+- codegen 生成的模块若模块名含下划线，权限点会静默错配：
+  `apiPrefix` 默认把 `my_module` 转成 `/api/my-module`（推导得 `my-module:list`），
+  而 `menu-*.sql` 登记的是 `my_module:list`，表现为连 ADMIN 都被 403。
+  现由生成的 `permPrefix()` 覆写消除。
+
+---
+
 ## 0.1.1 (2026-08-20)
 
 本版本只为交付业务方脚手架。**框架六个模块无任何功能变更**，

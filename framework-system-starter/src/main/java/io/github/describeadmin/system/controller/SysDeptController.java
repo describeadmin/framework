@@ -5,6 +5,7 @@ import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.entity.SysDept;
 import io.github.describeadmin.system.mapper.SysDeptMapper;
 import io.github.describeadmin.system.service.SysDeptService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,6 +28,7 @@ public class SysDeptController extends BaseController<SysDeptService, SysDeptMap
         return service;
     }
 
+    @PreAuthorize("hasAuthority('system:dept:list')")
     @GetMapping("/tree")
     public Result<List<SysDept>> tree() {
         return Result.ok(service.tree());

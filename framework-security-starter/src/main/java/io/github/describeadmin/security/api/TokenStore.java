@@ -1,5 +1,6 @@
 package io.github.describeadmin.security.api;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -46,4 +47,21 @@ public interface TokenStore {
      * @return 实际吊销的令牌数
      */
     int revokeAllOf(Long userId);
+
+    /**
+     * 列出当前全部在线会话，供"在线用户"管理页使用。
+     *
+     * <p><b>为什么是 default 方法</b>：本方法是在接口发布之后新增的，
+     * 写成抽象方法会让所有已实现 {@code TokenStore} 的业务方直接编译失败——
+     * 那是一次没有必要的破坏性变更。默认返回空列表，语义是"本实现不支持枚举"。
+     *
+     * <p>确实存在无法枚举的实现：譬如把令牌委托给外部统一认证中心的实现，
+     * 它根本不持有会话集合。这类实现保留默认行为即可，在线用户页会显示为空，
+     * 而不是抛异常把整个页面打死。
+     *
+     * @return 在线会话快照；不支持枚举时返回空列表，<b>不要抛异常</b>
+     */
+    default List<ActiveSession> listActive() {
+        return List.of();
+    }
 }

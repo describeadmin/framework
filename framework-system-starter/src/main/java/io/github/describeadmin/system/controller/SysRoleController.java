@@ -5,6 +5,7 @@ import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.entity.SysRole;
 import io.github.describeadmin.system.mapper.SysRoleMapper;
 import io.github.describeadmin.system.service.SysRoleService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -30,12 +31,14 @@ public class SysRoleController extends BaseController<SysRoleService, SysRoleMap
         return service;
     }
 
+    @PreAuthorize("hasAuthority('system:role:list')")
     @GetMapping("/{roleId}/menus")
     public Result<List<Long>> menus(@PathVariable Long roleId) {
         return Result.ok(service.menuIdsOf(roleId));
     }
 
     /** 重新授予菜单权限。整体覆盖而非增量修改，与授权的"重建"语义一致。 */
+    @PreAuthorize("hasAuthority('system:role:edit')")
     @PutMapping("/{roleId}/menus")
     public Result<Void> assignMenus(@PathVariable Long roleId, @RequestBody List<Long> menuIds) {
         service.assignMenus(roleId, menuIds);

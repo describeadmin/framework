@@ -7,6 +7,7 @@ import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.SysUserMapper;
 import io.github.describeadmin.system.service.SysUserService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,6 +54,7 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
                 "创建用户请使用 POST /api/system/user/with-password");
     }
 
+    @PreAuthorize("hasAuthority('system:user:add')")
     @PostMapping("/with-password")
     public Result<SysUser> createWithPassword(@RequestBody Map<String, Object> body) {
         SysUser u = new SysUser();
@@ -64,18 +66,21 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         return Result.ok(service.createUser(u, asString(body.get("password")), asIdList(body.get("roleIds"))));
     }
 
+    @PreAuthorize("hasAuthority('system:user:edit')")
     @PutMapping("/{userId}/password")
     public Result<Void> resetPassword(@PathVariable Long userId, @RequestBody Map<String, String> body) {
         service.resetPassword(userId, body.get("password"));
         return Result.ok();
     }
 
+    @PreAuthorize("hasAuthority('system:user:list')")
     @GetMapping("/{userId}/roles")
     public Result<List<Long>> roles(@PathVariable Long userId) {
         return Result.ok(service.roleIdsOf(userId));
     }
 
     /** 重新授予角色。整体覆盖而非增量修改。 */
+    @PreAuthorize("hasAuthority('system:user:edit')")
     @PutMapping("/{userId}/roles")
     public Result<Void> assignRoles(@PathVariable Long userId, @RequestBody List<Long> roleIds) {
         service.assignRoles(userId, roleIds);

@@ -33,7 +33,7 @@ jobs:
           set -e
           fail=0
           for m in framework-common framework-web-starter framework-security-starter \
-                   framework-mybatis-starter framework-system-starter; do
+                   framework-mybatis-starter framework-cache-starter framework-system-starter; do
             [ -d "$m/target/classes" ] || continue
             cls=$(find "$m/target/classes" -name '*.class' | head -1)
             ver=$(javap -v -p "$cls" | grep -m1 'major version' | grep -oE '[0-9]+')

@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.describeadmin</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>0.1.1</version>
+    <version>0.2.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>framework-common</artifactId>
@@ -25,4 +25,29 @@
       <artifactId>slf4j-api</artifactId>
     </dependency>
   </dependencies>
+
+  <build>
+    <resources>
+      <!--
+        只过滤这一个文件，不是整个 resources 目录。
+        对全目录开过滤会在将来放进任何二进制资源（图标、字体、模板）时把它们改坏，
+        而那种损坏是静默的——文件还在、大小差不多，打开才发现坏了。
+      -->
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes>
+          <include>META-INF/describeadmin-framework.properties</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>false</filtering>
+        <excludes>
+          <exclude>META-INF/describeadmin-framework.properties</exclude>
+        </excludes>
+      </resource>
+    </resources>
+  </build>
+
 </project>

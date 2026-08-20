@@ -47,6 +47,21 @@ public class FrameworkSecurityProperties {
      */
     private List<String> allowedOrigins = new ArrayList<>();
 
+    /**
+     * 是否启用权限点校验。
+     *
+     * <p>默认开启。关闭后 {@code PermissionChecker} 不注册，退回
+     * {@code PermissionChecker.PERMIT_ALL}，{@code BaseController} 的通用端点不再校验权限点；
+     * {@code @PreAuthorize} 也随 {@code @EnableMethodSecurity} 一并失效。
+     *
+     * <p><b>只应在排查问题时临时关闭</b>。关闭状态下任何已登录用户都能调用任何接口——
+     * 权限点仍会下发给前端用于按钮显隐，于是界面看起来是受控的，实际并不受控。
+     */
+    private boolean permissionEnabled = true;
+
+    /** 登录失败次数限制。 */
+    private final Lockout lockout = new Lockout();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -77,5 +92,64 @@ public class FrameworkSecurityProperties {
 
     public void setAllowedOrigins(List<String> allowedOrigins) {
         this.allowedOrigins = allowedOrigins == null ? new ArrayList<>() : allowedOrigins;
+    }
+
+    public boolean isPermissionEnabled() {
+        return permissionEnabled;
+    }
+
+    public void setPermissionEnabled(boolean permissionEnabled) {
+        this.permissionEnabled = permissionEnabled;
+    }
+
+    public Lockout getLockout() {
+        return lockout;
+    }
+
+    /**
+     * 登录失败次数限制，前缀 {@code describeadmin.security.lockout}。
+     *
+     * <p>可被用于拒绝服务——知道用户名的人可以故意输错密码把对方锁住。
+     * 这是按用户名锁定的固有代价，见 {@code LoginAttemptGuard} 的类注释。
+     */
+    public static class Lockout {
+
+        /** 是否启用。关闭后登录失败不计数，在线爆破只受网络吞吐限制。 */
+        private boolean enabled = true;
+
+        /** 锁定窗口内允许的连续失败次数。 */
+        private int maxFailures = 5;
+
+        /**
+         * 锁定时长，同时也是失败计数的存活时间。
+         *
+         * <p>到点自动解锁，不需要管理员介入——需要人工解锁的设计在政务场景里
+         * 会直接变成一线的运维负担。
+         */
+        private Duration duration = Duration.ofMinutes(15);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxFailures() {
+            return maxFailures;
+        }
+
+        public void setMaxFailures(int maxFailures) {
+            this.maxFailures = maxFailures;
+        }
+
+        public Duration getDuration() {
+            return duration;
+        }
+
+        public void setDuration(Duration duration) {
+            this.duration = duration;
+        }
     }
 }

@@ -211,6 +211,29 @@ FROM sys_menu m
 WHERE m.perm_code = 'system:dept:list' AND m.deleted = 0
   AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dept:remove' AND deleted = 0);
 
+-- 在线用户。
+--
+-- visible = 0 是【有意】的：后端已经可用，但前端 system/online/index 页面尚未交付。
+-- 菜单树按 visible = 1 过滤（见 SysMenuService.treeOf），置 0 可以让权限点先就位，
+-- 而不会在侧边栏生成一个点开就 404 的入口——component 指向不存在的文件时
+-- 前端是静默退化成 404，没有任何报错指向"页面还没写"。
+-- 前端页面落地后把这里改成 1 即可。
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '在线用户', 'MENU', 'system:online:list', '/system/online', 'system/online/index', 'lucide:monitor-dot', 5, 0,
+       NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:online:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '强制下线', 'BUTTON', 'system:online:remove', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:online:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:online:remove' AND deleted = 0);
+
 -- ADMIN 角色授予全部菜单
 INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT r.id, m.id

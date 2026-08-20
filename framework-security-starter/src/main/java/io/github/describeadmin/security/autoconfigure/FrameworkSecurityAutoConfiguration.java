@@ -1,14 +1,19 @@
 package io.github.describeadmin.security.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.describeadmin.cache.api.CacheProvider;
 import io.github.describeadmin.common.api.CurrentUserProvider;
+import io.github.describeadmin.common.api.PermissionChecker;
 import io.github.describeadmin.security.api.AuthProvider;
 import io.github.describeadmin.security.api.AuthUserLoader;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.InMemoryTokenStore;
+import io.github.describeadmin.security.core.LoginAttemptGuard;
 import io.github.describeadmin.security.core.ResultAuthenticationEntryPoint;
 import io.github.describeadmin.security.core.SecurityContextCurrentUserProvider;
+import io.github.describeadmin.security.core.SecurityContextPermissionChecker;
+import io.github.describeadmin.security.core.SecurityExceptionHandler;
 import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.security.core.UsernamePasswordAuthProvider;
 import org.springframework.beans.factory.ObjectProvider;
@@ -21,6 +26,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -60,18 +66,42 @@ public class FrameworkSecurityAutoConfiguration {
     }
 
     /**
+     * 登录失败次数限制。
+     *
+     * <p>{@code describeadmin.security.lockout.enabled=false} 时不注册，
+     * {@link UsernamePasswordAuthProvider} 拿到 null 后跳过全部计数逻辑。
+     *
+     * <p>缓存后端取自 {@link CacheProvider}：默认是内存实现（重启清零、多实例各算各的），
+     * 引入集中式实现后自动升级为全局计数，本类不用改。
+     */
+    @Bean
+    @ConditionalOnMissingBean(LoginAttemptGuard.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security.lockout", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public LoginAttemptGuard loginAttemptGuard(CacheProvider cacheProvider,
+                                               FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.Lockout lockout = properties.getLockout();
+        return new LoginAttemptGuard(cacheProvider, lockout.getMaxFailures(), lockout.getDuration());
+    }
+
+    /**
      * 内置用户名密码登录。
      *
      * <p>仅在业务方提供了 {@link AuthUserLoader} 实现时才注册——框架不知道用户存在哪里，
      * 没有 loader 就没法认证，此时静默不注册比启动失败更合适
      * （纯插件登录的项目可能完全不需要用户名密码方式）。
+     *
+     * <p>{@code ObjectProvider} 承接可选的 {@link LoginAttemptGuard}：
+     * 直接注入会在关闭失败次数限制时因找不到 Bean 而启动失败。
      */
     @Bean
     @ConditionalOnBean(AuthUserLoader.class)
     @ConditionalOnMissingBean(UsernamePasswordAuthProvider.class)
     public UsernamePasswordAuthProvider usernamePasswordAuthProvider(
-            AuthUserLoader userLoader, PasswordEncoder passwordEncoder) {
-        return new UsernamePasswordAuthProvider(userLoader, passwordEncoder);
+            AuthUserLoader userLoader, PasswordEncoder passwordEncoder,
+            ObjectProvider<LoginAttemptGuard> attemptGuard) {
+        return new UsernamePasswordAuthProvider(userLoader, passwordEncoder,
+                attemptGuard.getIfAvailable());
     }
 
     /**
@@ -109,6 +139,36 @@ public class FrameworkSecurityAutoConfiguration {
     }
 
     /**
+     * 把 SecurityContext 里的权限点暴露给 framework-common 的
+     * {@link PermissionChecker} 契约，使 {@code BaseController} 的通用 CRUD 端点
+     * 能在不依赖 Spring Security 的前提下做权限校验。
+     *
+     * <p>{@code describeadmin.security.permission-enabled=false} 时本 Bean 不注册，
+     * 消费方退回 {@link PermissionChecker#PERMIT_ALL}。
+     */
+    @Bean
+    @ConditionalOnMissingBean(PermissionChecker.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security", name = "permission-enabled",
+            havingValue = "true", matchIfMissing = true)
+    public PermissionChecker securityContextPermissionChecker() {
+        return new SecurityContextPermissionChecker();
+    }
+
+    /**
+     * 方法级安全，使业务方可以在自己的端点上用 {@code @PreAuthorize("hasAuthority('xxx:yyy:add')")}。
+     *
+     * <p>与 {@link PermissionChecker} 受同一个开关控制，避免出现"通用端点校验、
+     * 自定义端点不校验"这种一半生效的状态。
+     */
+    @AutoConfiguration
+    @EnableMethodSecurity
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnProperty(prefix = "describeadmin.security", name = "permission-enabled",
+            havingValue = "true", matchIfMissing = true)
+    public static class MethodSecurityConfiguration {
+    }
+
+    /**
      * Web 环境下的过滤器链。
      *
      * <p>拆成内部类是为了让 {@code @EnableWebSecurity} 与 Servlet 相关的类
@@ -134,6 +194,20 @@ public class FrameworkSecurityAutoConfiguration {
         @ConditionalOnMissingBean
         public TokenAuthenticationFilter tokenAuthenticationFilter(TokenStore tokenStore) {
             return new TokenAuthenticationFilter(tokenStore);
+        }
+
+        /**
+         * 授权异常的 advice 映射。
+         *
+         * <p>无条件注册（不随 permission-enabled 开关走）：即使框架的权限点校验被关掉，
+         * Spring Security 自身仍可能抛出 {@code AccessDeniedException}，
+         * 而 {@code GlobalExceptionHandler} 的 Throwable 兜底会把它变成 500。
+         * 见 {@link SecurityExceptionHandler} 的类注释。
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public SecurityExceptionHandler securityExceptionHandler() {
+            return new SecurityExceptionHandler();
         }
 
         @Bean
