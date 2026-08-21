@@ -53,6 +53,8 @@
     <module>framework-mybatis-starter</module>
     <module>framework-cache-starter</module>
     <module>framework-system-starter</module>
+    <module>framework-storage-starter</module>
+    <module>framework-notify-starter</module>
 
     <!--
       这里【只有核心模块】。可选插件（framework-cache-redis-starter 等）一律独立成仓，
@@ -185,6 +187,16 @@
       <dependency>
         <groupId>io.github.describeadmin</groupId>
         <artifactId>framework-system-starter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.describeadmin</groupId>
+        <artifactId>framework-storage-starter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.describeadmin</groupId>
+        <artifactId>framework-notify-starter</artifactId>
         <version>${project.version}</version>
       </dependency>
 
@@ -376,6 +388,19 @@
                     <exclude>org.quartz-scheduler:*</exclude>
                     <exclude>com.squareup.okhttp3:*</exclude>
                     <exclude>org.apache.httpcomponents.client5:*</exclude>
+                    <!-- 对象存储 SDK：具体实现应做成 framework-storage-<厂商>-starter 插件 -->
+                    <exclude>com.aliyun.oss:*</exclude>
+                    <exclude>com.aliyun:aliyun-java-sdk-*</exclude>
+                    <exclude>com.qcloud:cos_api</exclude>
+                    <exclude>com.amazonaws:aws-java-sdk-s3</exclude>
+                    <exclude>software.amazon.awssdk:s3</exclude>
+                    <exclude>io.minio:minio</exclude>
+                    <!-- 厂商推送/消息 SDK：具体实现应做成 framework-notify-<厂商>-starter 插件 -->
+                    <exclude>com.aliyun:dingtalk</exclude>
+                    <exclude>com.dingtalk.open:*</exclude>
+                    <exclude>com.github.binarywang:weixin-java-cp</exclude>
+                    <exclude>com.aliyun:dysmsapi*</exclude>
+                    <exclude>com.twilio.sdk:twilio</exclude>
                   </excludes>
                   <message>
                     核心模块不得引入重量级第三方依赖。这类能力应做成独立的
