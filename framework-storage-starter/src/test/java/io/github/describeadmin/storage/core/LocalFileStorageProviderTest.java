@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -73,6 +74,13 @@ class LocalFileStorageProviderTest {
         @DisplayName("url 使用配置的前缀拼接 key")
         void urlUsesConfiguredPrefix() {
             assertThat(storage.url("a/b.txt")).isEqualTo("/storage/a/b.txt");
+        }
+
+        @Test
+        @DisplayName("本地实现没有签名概念，presignedUrl 退化为 url，忽略过期时间")
+        void presignedUrlFallsBackToUrl() {
+            assertThat(storage.presignedUrl("a/b.txt", Duration.ofMinutes(10)))
+                    .isEqualTo(storage.url("a/b.txt"));
         }
 
         @Test
