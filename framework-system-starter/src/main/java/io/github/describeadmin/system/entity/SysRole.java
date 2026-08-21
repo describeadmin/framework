@@ -20,6 +20,12 @@ public class SysRole extends BaseEntity {
      */
     private Integer dataScope;
 
+    /**
+     * 该角色登录后的默认首页路径，取值须为 {@code sys_menu.path} 中真实存在的路径。
+     * 为 {@code null} 表示不覆盖，使用前端全局 {@code preferences.app.defaultHomePath}。
+     */
+    private String homePath;
+
     public String getRoleCode() { return roleCode; }
     public void setRoleCode(String roleCode) { this.roleCode = roleCode; }
     public String getRoleName() { return roleName; }
@@ -28,4 +34,6 @@ public class SysRole extends BaseEntity {
     public void setSort(Integer sort) { this.sort = sort; }
     public Integer getDataScope() { return dataScope; }
     public void setDataScope(Integer dataScope) { this.dataScope = dataScope; }
+    public String getHomePath() { return homePath; }
+    public void setHomePath(String homePath) { this.homePath = homePath; }
 }

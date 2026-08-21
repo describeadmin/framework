@@ -41,15 +41,28 @@ public class AuthUser implements Serializable {
     /** {@code dataScope} 为 {@link DataScopeType#CUSTOM} 时的部门 ID 集合，其余档为空集。 */
     private final Set<Long> customDeptIds;
 
+    /**
+     * 全部角色合并后的默认首页路径，{@code null} 表示没有任何角色设置过，
+     * 由前端落回全局 {@code preferences.app.defaultHomePath}。
+     */
+    private final String homePath;
+
     public AuthUser(Long userId, String username, String passwordHash, String nickname,
                     boolean enabled, Set<String> roles, Set<String> permissions) {
         this(userId, username, passwordHash, nickname, enabled, roles, permissions,
-                null, DataScopeType.ALL, Set.of());
+                null, DataScopeType.ALL, Set.of(), null);
     }
 
     public AuthUser(Long userId, String username, String passwordHash, String nickname,
                     boolean enabled, Set<String> roles, Set<String> permissions,
                     Long deptId, DataScopeType dataScope, Set<Long> customDeptIds) {
+        this(userId, username, passwordHash, nickname, enabled, roles, permissions,
+                deptId, dataScope, customDeptIds, null);
+    }
+
+    public AuthUser(Long userId, String username, String passwordHash, String nickname,
+                    boolean enabled, Set<String> roles, Set<String> permissions,
+                    Long deptId, DataScopeType dataScope, Set<Long> customDeptIds, String homePath) {
         this.userId = userId;
         this.username = username;
         this.passwordHash = passwordHash;
@@ -60,6 +73,7 @@ public class AuthUser implements Serializable {
         this.deptId = deptId;
         this.dataScope = dataScope == null ? DataScopeType.ALL : dataScope;
         this.customDeptIds = immutableLong(customDeptIds);
+        this.homePath = homePath;
     }
 
     private static Set<String> immutable(Set<String> src) {
@@ -75,7 +89,7 @@ public class AuthUser implements Serializable {
     /** 转换为对外流通的登录用户，<b>丢弃密码哈希</b>。 */
     public LoginUser toLoginUser(String authType) {
         return new LoginUser(userId, username, nickname, authType, roles, permissions,
-                deptId, dataScope, customDeptIds);
+                deptId, dataScope, customDeptIds, homePath);
     }
 
     public Long getUserId() {
@@ -116,5 +130,9 @@ public class AuthUser implements Serializable {
 
     public Set<Long> getCustomDeptIds() {
         return customDeptIds;
+    }
+
+    public String getHomePath() {
+        return homePath;
     }
 }

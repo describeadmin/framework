@@ -55,10 +55,14 @@ public interface SysRelationMapper {
             + "<foreach collection='menuIds' item='mid' separator=','>(#{roleId}, #{mid})</foreach></script>")
     int insertRoleMenus(@Param("roleId") Long roleId, @Param("menuIds") List<Long> menuIds);
 
-    /** 当前用户全部角色的数据权限范围，供 {@code DataScopeResolver} 合并。 */
-    @Select("SELECT r.id AS role_id, r.data_scope AS data_scope FROM sys_role r "
+    /**
+     * 当前用户全部角色的数据权限范围与默认首页，供 {@code DataScopeResolver}/
+     * {@code HomePathResolver} 合并。按 {@code sort} 升序——首页合并规则是
+     * "取排序靠前且非空的第一个"，需要确定性顺序。
+     */
+    @Select("SELECT r.id AS role_id, r.data_scope AS data_scope, r.home_path AS home_path FROM sys_role r "
             + "JOIN sys_user_role ur ON ur.role_id = r.id "
-            + "WHERE ur.user_id = #{userId} AND r.deleted = 0")
+            + "WHERE ur.user_id = #{userId} AND r.deleted = 0 ORDER BY r.sort")
     List<RoleScope> selectDataScopesByUserId(@Param("userId") Long userId);
 
     @Select("SELECT dept_id FROM sys_role_dept WHERE role_id = #{roleId}")

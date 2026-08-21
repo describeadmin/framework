@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS sys_role (
   sort         INT         NOT NULL DEFAULT 0      COMMENT '排序',
   -- 1全部 2自定义部门 3本部门 4本部门及以下 5仅本人，与 DataScopeType.getCode() 对应
   data_scope   TINYINT     NOT NULL DEFAULT 3      COMMENT '数据权限范围',
+  -- 取值须为 sys_menu.path 中真实存在的路径；为空表示该角色不覆盖，使用前端全局 defaultHomePath
+  home_path    VARCHAR(191)    NULL                COMMENT '默认首页路径',
   create_by    BIGINT          NULL                COMMENT '创建人',
   create_time  DATETIME        NULL                COMMENT '创建时间',
   update_by    BIGINT          NULL                COMMENT '更新人',

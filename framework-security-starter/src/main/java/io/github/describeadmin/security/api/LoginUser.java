@@ -37,15 +37,28 @@ public class LoginUser implements Serializable {
     /** {@code dataScope} 为 {@link DataScopeType#CUSTOM} 时的部门 ID 集合，其余档为空集。 */
     private final Set<Long> customDeptIds;
 
+    /**
+     * 全部角色合并后的默认首页路径，{@code null} 表示没有任何角色设置过，
+     * 由前端落回全局 {@code preferences.app.defaultHomePath}。
+     */
+    private final String homePath;
+
     public LoginUser(Long userId, String username, String nickname, String authType,
                      Set<String> roles, Set<String> permissions) {
         this(userId, username, nickname, authType, roles, permissions,
-                null, DataScopeType.ALL, Set.of());
+                null, DataScopeType.ALL, Set.of(), null);
     }
 
     public LoginUser(Long userId, String username, String nickname, String authType,
                      Set<String> roles, Set<String> permissions,
                      Long deptId, DataScopeType dataScope, Set<Long> customDeptIds) {
+        this(userId, username, nickname, authType, roles, permissions,
+                deptId, dataScope, customDeptIds, null);
+    }
+
+    public LoginUser(Long userId, String username, String nickname, String authType,
+                     Set<String> roles, Set<String> permissions,
+                     Long deptId, DataScopeType dataScope, Set<Long> customDeptIds, String homePath) {
         this.userId = userId;
         this.username = username;
         this.nickname = nickname;
@@ -55,6 +68,7 @@ public class LoginUser implements Serializable {
         this.deptId = deptId;
         this.dataScope = dataScope == null ? DataScopeType.ALL : dataScope;
         this.customDeptIds = immutableLong(customDeptIds);
+        this.homePath = homePath;
     }
 
     private static Set<String> immutable(Set<String> src) {
@@ -103,5 +117,9 @@ public class LoginUser implements Serializable {
 
     public Set<Long> getCustomDeptIds() {
         return customDeptIds;
+    }
+
+    public String getHomePath() {
+        return homePath;
     }
 }

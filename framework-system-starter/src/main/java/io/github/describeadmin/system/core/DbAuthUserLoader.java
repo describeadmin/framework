@@ -47,6 +47,7 @@ public class DbAuthUserLoader implements AuthUserLoader {
         Set<Long> customDeptIds = dataScope == DataScopeType.CUSTOM
                 ? customDeptIdsOf(roleScopes)
                 : Set.of();
+        String homePath = HomePathResolver.resolve(roleScopes);
 
         return Optional.of(new AuthUser(
                 user.getId(),
@@ -58,7 +59,8 @@ public class DbAuthUserLoader implements AuthUserLoader {
                 new LinkedHashSet<>(relationMapper.selectPermCodesByUserId(user.getId())),
                 user.getDeptId(),
                 dataScope,
-                customDeptIds));
+                customDeptIds,
+                homePath));
     }
 
     /** 合并结果为 CUSTOM 时，并集全部同样标了 CUSTOM 档的角色各自配置的部门。 */
