@@ -4,6 +4,7 @@ import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseController;
+import io.github.describeadmin.system.core.OperLog;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.SysUserMapper;
 import io.github.describeadmin.system.service.SysUserService;
@@ -54,6 +55,7 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
                 "创建用户请使用 POST /api/system/user/with-password");
     }
 
+    @OperLog(module = "system:user", description = "创建用户")
     @PreAuthorize("hasAuthority('system:user:add')")
     @PostMapping("/with-password")
     public Result<SysUser> createWithPassword(@RequestBody Map<String, Object> body) {
@@ -66,6 +68,7 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         return Result.ok(service.createUser(u, asString(body.get("password")), asIdList(body.get("roleIds"))));
     }
 
+    @OperLog(module = "system:user", description = "重置密码")
     @PreAuthorize("hasAuthority('system:user:edit')")
     @PutMapping("/{userId}/password")
     public Result<Void> resetPassword(@PathVariable Long userId, @RequestBody Map<String, String> body) {
@@ -80,6 +83,7 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
     }
 
     /** 重新授予角色。整体覆盖而非增量修改。 */
+    @OperLog(module = "system:user", description = "分配角色")
     @PreAuthorize("hasAuthority('system:user:edit')")
     @PutMapping("/{userId}/roles")
     public Result<Void> assignRoles(@PathVariable Long userId, @RequestBody List<Long> roleIds) {

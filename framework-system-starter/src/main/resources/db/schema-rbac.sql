@@ -139,3 +139,87 @@ CREATE TABLE IF NOT EXISTS sys_dept (
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_general_ci
   COMMENT='部门';
+
+CREATE TABLE IF NOT EXISTS sys_dict_type (
+  id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
+  dict_type    VARCHAR(64) NOT NULL                COMMENT '字典类型编码',
+  dict_name    VARCHAR(64) NOT NULL                COMMENT '字典名称',
+  status       TINYINT     NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
+  create_by    BIGINT          NULL                COMMENT '创建人',
+  create_time  DATETIME        NULL                COMMENT '创建时间',
+  update_by    BIGINT          NULL                COMMENT '更新人',
+  update_time  DATETIME        NULL                COMMENT '更新时间',
+  deleted      TINYINT     NOT NULL DEFAULT 0      COMMENT '逻辑删除',
+  version      INT         NOT NULL DEFAULT 0      COMMENT '乐观锁版本号',
+  PRIMARY KEY (id),
+  -- 逻辑删除下不建唯一索引，理由同 sys_user.username
+  KEY idx_sys_dict_type_type (dict_type)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='字典类型';
+
+CREATE TABLE IF NOT EXISTS sys_dict_data (
+  id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  dict_type    VARCHAR(64)  NOT NULL                COMMENT '所属字典类型编码',
+  dict_label   VARCHAR(64)  NOT NULL                COMMENT '字典标签，前端展示用',
+  dict_value   VARCHAR(191) NOT NULL                COMMENT '字典值，业务存储用',
+  sort         INT          NOT NULL DEFAULT 0      COMMENT '排序',
+  status       TINYINT      NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
+  create_by    BIGINT           NULL                COMMENT '创建人',
+  create_time  DATETIME         NULL                COMMENT '创建时间',
+  update_by    BIGINT           NULL                COMMENT '更新人',
+  update_time  DATETIME         NULL                COMMENT '更新时间',
+  deleted      TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除',
+  version      INT          NOT NULL DEFAULT 0      COMMENT '乐观锁版本号',
+  PRIMARY KEY (id),
+  KEY idx_sys_dict_data_type (dict_type)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='字典数据';
+
+CREATE TABLE IF NOT EXISTS sys_config (
+  id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  config_key   VARCHAR(128) NOT NULL                COMMENT '参数键',
+  config_value VARCHAR(500) NOT NULL                COMMENT '参数值',
+  config_name  VARCHAR(64)      NULL                COMMENT '参数名称',
+  -- Y/N，是否内置，仅作展示用，本版本不做删除保护
+  config_type  VARCHAR(1)       NULL                COMMENT '是否内置',
+  create_by    BIGINT           NULL                COMMENT '创建人',
+  create_time  DATETIME         NULL                COMMENT '创建时间',
+  update_by    BIGINT           NULL                COMMENT '更新人',
+  update_time  DATETIME         NULL                COMMENT '更新时间',
+  deleted      TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除',
+  version      INT          NOT NULL DEFAULT 0      COMMENT '乐观锁版本号',
+  PRIMARY KEY (id),
+  KEY idx_sys_config_key (config_key)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='系统参数配置';
+
+-- 只追加、由 OperLogAspect 写入，不继承 BaseEntity 的审计字段/逻辑删除/乐观锁语义
+-- （见 SysOperLog 的类注释），所以没有 create_by/update_by/update_time/deleted/version。
+CREATE TABLE IF NOT EXISTS sys_oper_log (
+  id             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  module         VARCHAR(64)      NULL                COMMENT '模块，如 system:dept',
+  description    VARCHAR(128)     NULL                COMMENT '操作描述，如"创建部门"',
+  http_method    VARCHAR(16)      NULL                COMMENT 'HTTP 方法',
+  request_url    VARCHAR(255)     NULL                COMMENT '请求路径',
+  operator_id    BIGINT           NULL                COMMENT '操作人ID',
+  operator_name  VARCHAR(64)      NULL                COMMENT '操作人用户名',
+  operator_ip    VARCHAR(64)      NULL                COMMENT '操作人IP',
+  -- 脱敏后的请求参数 JSON，截断到 2000 字符，见 OperLogAspect
+  request_param  VARCHAR(2000)    NULL                COMMENT '请求参数（已脱敏）',
+  status         TINYINT      NOT NULL DEFAULT 1      COMMENT '1成功 0失败',
+  error_msg      VARCHAR(2000)    NULL                COMMENT '失败时的异常信息',
+  cost_time      BIGINT           NULL                COMMENT '耗时，毫秒',
+  create_time    DATETIME         NULL                COMMENT '操作时间',
+  PRIMARY KEY (id),
+  KEY idx_sys_oper_log_operator (operator_id),
+  KEY idx_sys_oper_log_create_time (create_time)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='操作日志';

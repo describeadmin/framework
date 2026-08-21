@@ -33,6 +33,13 @@
 - `AuthUser` / `LoginUser` 的构造函数新增 `deptId`、`dataScope`、`customDeptIds` 三个参数。
   保留了不含这三项的旧构造函数重载，业务方自定义的 `AuthUserLoader` 实现无需改动即可编译通过，
   只是新用户会退回 `DataScopeType.ALL`（不过滤）。
+- **`BaseController.permPrefix()` 从 `protected` 放宽为 `public`**——操作日志切面需要
+  跨包读取它。纯粹的加法，不影响任何调用方；但任何业务方自己覆写过
+  `permPrefix()` 的 Controller，若声明为 `protected`，会因为"子类不能降低父类方法可见性"
+  这条 Java 规则编译失败，需要同步改成 `public`（本仓库的 `sample-app` 示例已同步）。
+- 新增 `sys_dict_type`/`sys_dict_data`/`sys_config`/`sys_oper_log` 四张表（字典、
+  参数配置、操作日志）。同样是对已建库环境的破坏性 schema 变更，与上一条数据权限的
+  变更一起处理即可（同一次重建库覆盖两者）。
 
 ### New Features
 
@@ -147,6 +154,44 @@
   权限点 `system:role:assign-dept`，与已有的 `.../menus` 同一"重建"语义。
 - ADMIN 角色的 `data_scope` 由种子数据显式置为"全部"，代码里不特判 `role_code == 'ADMIN'`，
   与 ADMIN 靠种子数据被授予全部菜单是同一手法。
+
+**字典 + 参数配置**（阶段 E）
+
+- `sys_dict_type`/`sys_dict_data`：字典类型与数据两张表、两个 Controller，共用权限前缀
+  `system:dict`（同一个管理页面的两个面板，见两者都覆写的 `permPrefix()`）。
+  `GET /api/system/dict/data/type/{dictType}` 取某类型下全部启用中的字典项，供前端下拉框用。
+- `sys_config`：系统参数配置，`SysConfigService.getValue(key[, default])` 是给框架其余
+  模块直接调用的便捷方法，不必都经过 HTTP。
+- 两者的查询都读穿 `CacheProvider`（新增配置项 `describeadmin.system.dict.cache-ttl` /
+  `describeadmin.system.config.cache-ttl`，默认均为 30 分钟），写操作后主动失效对应缓存
+  ——`framework-cache-starter` 的类注释早先就点名"字典快照"是它的目标场景之一。
+  `framework-system-starter` 因此新增对 `framework-cache-starter` 的依赖，
+  与 `framework-security-starter` 引入它的理由相同。
+
+**操作日志**（阶段 E）
+
+- 新增 `framework-system-starter` 对 `spring-boot-starter-aop` 的依赖（轻量级，
+  不在 `enforce-core-thin` 封禁清单里）。两条切入路径，与权限校验"框架托底通用路径 +
+  自定义路径显式声明"是同一个心智模型：
+  - `BaseController` 的 create/update/delete 三个通用端点自动记录，业务方无需任何标注——
+    覆写了这三个方法的子类（如 `SysDeptController`）同样被记录，AspectJ 的
+    `execution(Type+.method(..))` 按整个类型层级匹配方法签名，覆写不会让它从
+    "这是一次 BaseController.create() 执行"里消失。
+  - 自定义端点用新注解 `@OperLog(module, description)` 显式声明，已给
+    `SysUserController`/`SysRoleController`/`SysOnlineController` 的自定义写端点补上。
+- **请求参数里但凡 key 命中 `password`/`pwd`/`secret`/`token`（大小写不敏感、子串匹配）
+  的字段，整段替换为 `***` 再落库**——这是唯一的安全底线，不做的话
+  `POST /api/system/user/with-password` 的明文密码会原样进 `sys_oper_log`。
+- 失败的操作同样落日志（`status` 标记失败 + 记录异常信息），不会被静默吞掉；
+  日志本身写入失败只记 `slf4j` 错误，绝不向上抛出拖累真正的业务操作。
+- 同步写入，不做异步——中小规模项目下单行 INSERT 的延迟可以接受，真到了需要异步的量级
+  再加，不预先绕路。
+- `sys_oper_log` **不继承 `BaseEntity`**：只追加、不给用户改的审计表，审计字段/逻辑删除/
+  乐观锁语义不适用，与 `SysOnlineController` 不继承 `BaseController` 是同一类判断。
+- `GET /api/system/oper-log`（分页 + 按 module/operatorName/status/时间范围筛选）、
+  `DELETE /api/system/oper-log/{id}`、`DELETE /api/system/oper-log/clean`（清空，
+  复用删除的权限点，不单独开一个权限对象）。
+- 新增配置项 `describeadmin.system.oper-log.enabled`（默认 `true`）。
 
 ### Bug Fixes
 

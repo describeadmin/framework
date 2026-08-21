@@ -2,6 +2,7 @@ package io.github.describeadmin.system.controller;
 
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.mybatis.api.BaseController;
+import io.github.describeadmin.system.core.OperLog;
 import io.github.describeadmin.system.entity.SysRole;
 import io.github.describeadmin.system.mapper.SysRoleMapper;
 import io.github.describeadmin.system.service.SysRoleService;
@@ -38,6 +39,7 @@ public class SysRoleController extends BaseController<SysRoleService, SysRoleMap
     }
 
     /** 重新授予菜单权限。整体覆盖而非增量修改，与授权的"重建"语义一致。 */
+    @OperLog(module = "system:role", description = "分配菜单")
     @PreAuthorize("hasAuthority('system:role:edit')")
     @PutMapping("/{roleId}/menus")
     public Result<Void> assignMenus(@PathVariable Long roleId, @RequestBody List<Long> menuIds) {
@@ -56,6 +58,7 @@ public class SysRoleController extends BaseController<SysRoleService, SysRoleMap
     }
 
     /** 重新指定自定义数据权限的部门列表。整体覆盖，与 {@link #assignMenus} 同一语义。 */
+    @OperLog(module = "system:role", description = "分配数据权限")
     @PreAuthorize("hasAuthority('system:role:assign-dept')")
     @PutMapping("/{roleId}/depts")
     public Result<Void> assignDepts(@PathVariable Long roleId, @RequestBody List<Long> deptIds) {

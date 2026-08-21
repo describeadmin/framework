@@ -1,15 +1,19 @@
 package io.github.describeadmin.system.autoconfigure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.describeadmin.mybatis.api.DataScopeTableCustomizer;
 import io.github.describeadmin.security.api.AuthUserLoader;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityAutoConfiguration;
 import io.github.describeadmin.system.core.DbAuthUserLoader;
+import io.github.describeadmin.system.core.OperLogAspect;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
+import io.github.describeadmin.system.service.SysOperLogService;
 import io.github.describeadmin.system.service.SysUserService;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 
@@ -36,6 +40,7 @@ import org.springframework.context.annotation.ComponentScan;
 @AutoConfiguration(before = FrameworkSecurityAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "describeadmin.system", name = "enabled",
         havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(FrameworkSystemProperties.class)
 @MapperScan("io.github.describeadmin.system.mapper")
 @ComponentScan(basePackages = {
         "io.github.describeadmin.system.service",
@@ -66,5 +71,20 @@ public class FrameworkSystemAutoConfiguration {
     @Bean
     public DataScopeTableCustomizer sysUserDataScopeTableCustomizer() {
         return tableToDeptColumn -> tableToDeptColumn.put("sys_user", "dept_id");
+    }
+
+    /**
+     * 操作日志切面。
+     *
+     * <p>不在 {@code @ComponentScan} 的两个基础包（service/controller）里，
+     * 与 {@link DbAuthUserLoader} 一样显式 {@code @Bean} 注册——{@code core} 包下的类
+     * 一律走这条路径，不悄悄再加一个 basePackage。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "describeadmin.system.oper-log", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public OperLogAspect operLogAspect(SysOperLogService operLogService, ObjectMapper objectMapper) {
+        return new OperLogAspect(operLogService, objectMapper);
     }
 }

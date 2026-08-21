@@ -52,7 +52,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 | `framework-security-starter` | 不透明令牌认证、`AuthProvider` / `TokenStore` SPI、服务端权限点校验、登录失败锁定、在线会话枚举 |
 | `framework-cache-starter` | `CacheProvider` 缓存契约与零依赖内存实现 |
 | `framework-mybatis-starter` | `BaseEntity` / `BaseService` / `BaseController` 基类，审计字段、逻辑删除、拦截器链扩展缝、数据权限拦截器 |
-| `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门 / 在线用户管理 + 数据权限（含建表与种子 SQL） |
+| `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门 / 在线用户管理 + 数据权限 + 字典 / 参数配置 / 操作日志（含建表与种子 SQL） |
 | `describeadmin-archetype` | 业务方工程脚手架，与框架同版本发布 |
 
 ## 已完成的后端能力
@@ -94,6 +94,28 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
   全部子孙的路径，并拒绝把部门移动到自己的子部门下
 - `GET`/`PUT /api/system/role/{roleId}/depts`：自定义数据权限的部门列表
 - 新增配置项 `describeadmin.mybatis.data-scope.enabled`（默认 `true`）
+
+**字典 + 参数配置**（`framework-system-starter`，读穿 `CacheProvider`）
+
+- 字典类型 + 字典数据两张表，共用权限前缀 `system:dict`（同一个管理页面的两个面板）；
+  `GET /api/system/dict/data/type/{dictType}` 供前端下拉框按类型取值
+- 参数配置 `sys_config`：`SysConfigService.getValue(key[, default])` 给框架其余模块
+  直接调用，不必都经过 HTTP
+- 两者的查询默认缓存 30 分钟（`describeadmin.system.dict.cache-ttl` /
+  `describeadmin.system.config.cache-ttl` 可调），写操作后主动失效对应缓存
+
+**操作日志**（`framework-system-starter`，`sys_oper_log`）
+
+- 两条捕获路径：`BaseController` 的 create/update/delete 自动记录，不需要子类做任何事；
+  自定义端点用 `@OperLog(module, description)` 显式声明——与权限校验"框架托底通用路径 +
+  自定义路径显式声明"是同一个心智模型
+- **请求参数里 key 命中 `password`/`pwd`/`secret`/`token` 的字段会被整段替换为 `***`
+  再落库**，不分大小写
+- 失败的操作同样落日志（记录失败状态与异常信息），日志写入本身失败只记错误日志、
+  不影响真正的业务操作
+- `GET /api/system/oper-log`（分页 + 按模块/操作人/状态/时间范围筛选）、
+  `DELETE /api/system/oper-log/{id}`、`DELETE /api/system/oper-log/clean`（清空）
+- 新增配置项 `describeadmin.system.oper-log.enabled`（默认 `true`）
 
 **缓存契约**（新模块 `framework-cache-starter`）
 

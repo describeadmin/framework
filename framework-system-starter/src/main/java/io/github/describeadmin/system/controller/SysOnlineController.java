@@ -3,6 +3,7 @@ package io.github.describeadmin.system.controller;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.security.api.ActiveSession;
 import io.github.describeadmin.security.api.TokenStore;
+import io.github.describeadmin.system.core.OperLog;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -55,6 +56,7 @@ public class SysOnlineController {
      *
      * @return 实际吊销的令牌数；该用户本来就不在线时为 0
      */
+    @OperLog(module = "system:online", description = "强制下线")
     @PreAuthorize("hasAuthority('system:online:remove')")
     @DeleteMapping("/{userId}")
     public Result<Integer> forceLogout(@PathVariable Long userId) {

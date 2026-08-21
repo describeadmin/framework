@@ -85,9 +85,13 @@ public abstract class BaseController<S extends BaseService<M, T>,
      * 推导结果会与 {@code menu-*.sql} 里登记的权限点对不上。codegen 已改为
      * 在这种情况下直接生成覆写，业务方手写的 Controller 需自行注意。
      *
+     * <p><b>为什么是 {@code public} 而不是 {@code protected}</b>：操作日志切面
+     * （{@code framework-system-starter} 的 {@code OperLogAspect}）需要跨包读取它，
+     * 用它给自动记录的日志打上"模块"标签。放宽可见性是纯粹的加法，不影响任何既有调用方。
+     *
      * @return 权限点前缀，如 {@code system:user}
      */
-    protected String permPrefix() {
+    public String permPrefix() {
         String cached = cachedPermPrefix;
         if (cached == null) {
             cached = derivePermPrefix();

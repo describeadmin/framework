@@ -127,7 +127,7 @@ class BaseControllerPermPrefixTest {
     @RequestMapping("/api/whatever")
     private static final class OverriddenController extends StubController {
         @Override
-        protected String permPrefix() {
+        public String permPrefix() {
             return "custom:prefix";
         }
     }

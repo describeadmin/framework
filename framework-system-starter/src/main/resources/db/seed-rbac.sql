@@ -243,6 +243,93 @@ FROM sys_menu m
 WHERE m.perm_code = 'system:online:list' AND m.deleted = 0
   AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:online:remove' AND deleted = 0);
 
+-- -----------------------------------------------------------------------------
+-- 字典管理。字典类型与字典数据共用 system:dict 前缀（同一个管理页面的两个面板），
+-- 见 SysDictTypeController/SysDictDataController 都覆写的 permPrefix()。
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '字典管理', 'MENU', 'system:dict:list', '/system/dict', 'system/dict/index', 'lucide:book-open', 6, 1,
+       NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:dict:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dict:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:dict:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dict:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:dict:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dict:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:remove' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 参数配置
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '参数配置', 'MENU', 'system:config:list', '/system/config', 'system/config/index', 'lucide:sliders-horizontal',
+       7, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:config:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:config:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:config:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:config:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:config:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:config:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:remove' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 操作日志。只有"删除"一个按钮权限点——清空复用它，不单独开一个权限对象
+-- （见 SysOperLogController 的类注释）。
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '操作日志', 'MENU', 'system:oper-log:list', '/system/oper-log', 'system/oper-log/index',
+       'lucide:scroll-text', 8, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:oper-log:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:oper-log:remove', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:oper-log:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:oper-log:remove' AND deleted = 0);
+
 -- ADMIN 角色授予全部菜单
 INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT r.id, m.id
