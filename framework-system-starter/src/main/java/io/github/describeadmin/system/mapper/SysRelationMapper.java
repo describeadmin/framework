@@ -54,4 +54,20 @@ public interface SysRelationMapper {
     @Insert("<script>INSERT INTO sys_role_menu (role_id, menu_id) VALUES "
             + "<foreach collection='menuIds' item='mid' separator=','>(#{roleId}, #{mid})</foreach></script>")
     int insertRoleMenus(@Param("roleId") Long roleId, @Param("menuIds") List<Long> menuIds);
+
+    /** 当前用户全部角色的数据权限范围，供 {@code DataScopeResolver} 合并。 */
+    @Select("SELECT r.id AS role_id, r.data_scope AS data_scope FROM sys_role r "
+            + "JOIN sys_user_role ur ON ur.role_id = r.id "
+            + "WHERE ur.user_id = #{userId} AND r.deleted = 0")
+    List<RoleScope> selectDataScopesByUserId(@Param("userId") Long userId);
+
+    @Select("SELECT dept_id FROM sys_role_dept WHERE role_id = #{roleId}")
+    List<Long> selectDeptIdsByRoleId(@Param("roleId") Long roleId);
+
+    @Delete("DELETE FROM sys_role_dept WHERE role_id = #{roleId}")
+    int deleteRoleDepts(@Param("roleId") Long roleId);
+
+    @Insert("<script>INSERT INTO sys_role_dept (role_id, dept_id) VALUES "
+            + "<foreach collection='deptIds' item='did' separator=','>(#{roleId}, #{did})</foreach></script>")
+    int insertRoleDepts(@Param("roleId") Long roleId, @Param("deptIds") List<Long> deptIds);
 }

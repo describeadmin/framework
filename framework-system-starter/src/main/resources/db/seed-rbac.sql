@@ -18,8 +18,10 @@ SELECT 'admin', '$2a$10$CgwiT6Di8uRu6cwzRgxxJOQLMfHUfrd640xFpmiI3OuU2Bi6/EQMe', 
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin' AND deleted = 0);
 
-INSERT INTO sys_role (role_code, role_name, sort, create_time, update_time, deleted, version)
-SELECT 'ADMIN', '超级管理员', 1, NOW(), NOW(), 0, 0
+-- data_scope = 1（全部）：不在代码里特判 role_code = 'ADMIN'，与"ADMIN 靠种子数据
+-- 授予全部菜单"是同一手法——种子数据决定 ADMIN 是超级管理员，不是代码里的特例分支。
+INSERT INTO sys_role (role_code, role_name, sort, data_scope, create_time, update_time, deleted, version)
+SELECT 'ADMIN', '超级管理员', 1, 1, NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_role WHERE role_code = 'ADMIN' AND deleted = 0);
 
@@ -171,6 +173,13 @@ WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
 
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
                       create_time, update_time, deleted, version)
+SELECT m.id, '分配数据权限', 'BUTTON', 'system:role:assign-dept', NULL, NULL, NULL, 5, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:role:assign-dept' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
 SELECT m.id, '新增', 'BUTTON', 'system:menu:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
 FROM sys_menu m
 WHERE m.perm_code = 'system:menu:list' AND m.deleted = 0
@@ -243,8 +252,10 @@ WHERE r.role_code = 'ADMIN' AND r.deleted = 0 AND m.deleted = 0
     SELECT 1 FROM sys_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id
   );
 
--- 根部门
-INSERT INTO sys_dept (parent_id, dept_name, leader, sort, status, create_time, update_time, deleted, version)
-SELECT 0, '总部', '管理员', 1, 1, NOW(), NOW(), 0, 0
+-- 根部门。ancestors 显式写空串——顶级部门没有祖先，不依赖列默认值，
+-- 与本文件其余 INSERT 逐列列全的风格一致。
+INSERT INTO sys_dept (parent_id, dept_name, leader, sort, status, ancestors,
+                      create_time, update_time, deleted, version)
+SELECT 0, '总部', '管理员', 1, 1, '', NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_dept WHERE dept_name = '总部' AND parent_id = 0 AND deleted = 0);

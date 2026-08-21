@@ -44,4 +44,22 @@ public class SysRoleController extends BaseController<SysRoleService, SysRoleMap
         service.assignMenus(roleId, menuIds);
         return Result.ok();
     }
+
+    /**
+     * 该角色自定义数据权限的部门列表。{@code data_scope} 本身是 {@link SysRole} 上的
+     * 普通字段，走通用的 {@code update()} 端点即可，不需要单独接口。
+     */
+    @PreAuthorize("hasAuthority('system:role:list')")
+    @GetMapping("/{roleId}/depts")
+    public Result<List<Long>> depts(@PathVariable Long roleId) {
+        return Result.ok(service.deptIdsOf(roleId));
+    }
+
+    /** 重新指定自定义数据权限的部门列表。整体覆盖，与 {@link #assignMenus} 同一语义。 */
+    @PreAuthorize("hasAuthority('system:role:assign-dept')")
+    @PutMapping("/{roleId}/depts")
+    public Result<Void> assignDepts(@PathVariable Long roleId, @RequestBody List<Long> deptIds) {
+        service.assignDataScopeDepts(roleId, deptIds);
+        return Result.ok();
+    }
 }

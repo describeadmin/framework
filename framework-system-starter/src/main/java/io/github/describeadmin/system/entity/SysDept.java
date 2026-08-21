@@ -18,6 +18,14 @@ public class SysDept extends BaseEntity {
     private Integer sort;
     private Integer status;
 
+    /**
+     * 祖先部门 id，逗号分隔，从根到直接父级，不含自身、不含合成的顶级标记——
+     * 顶级部门（{@code parentId=0}）的本字段是空串。由
+     * {@code SysDeptService.createDept()}/{@code updateDept()} 维护，业务方不应直接赋值。
+     * 供"本部门及以下"这档数据权限用 {@code FIND_IN_SET} 判断下级关系。
+     */
+    private String ancestors;
+
     @TableField(exist = false)
     private List<SysDept> children = new ArrayList<>();
 
@@ -33,6 +41,8 @@ public class SysDept extends BaseEntity {
     public void setSort(Integer sort) { this.sort = sort; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
+    public String getAncestors() { return ancestors; }
+    public void setAncestors(String ancestors) { this.ancestors = ancestors; }
     public List<SysDept> getChildren() { return children; }
     public void setChildren(List<SysDept> children) { this.children = children; }
 }

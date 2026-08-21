@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS sys_role (
   role_code    VARCHAR(64) NOT NULL                COMMENT '角色标识',
   role_name    VARCHAR(64) NOT NULL                COMMENT '角色名称',
   sort         INT         NOT NULL DEFAULT 0      COMMENT '排序',
+  -- 1全部 2自定义部门 3本部门 4本部门及以下 5仅本人，与 DataScopeType.getCode() 对应
+  data_scope   TINYINT     NOT NULL DEFAULT 3      COMMENT '数据权限范围',
   create_by    BIGINT          NULL                COMMENT '创建人',
   create_time  DATETIME        NULL                COMMENT '创建时间',
   update_by    BIGINT          NULL                COMMENT '更新人',
@@ -103,6 +105,17 @@ CREATE TABLE IF NOT EXISTS sys_role_menu (
   COLLATE utf8mb4_general_ci
   COMMENT='角色菜单关联';
 
+-- 角色自定义数据权限的部门列表，只在对应角色 data_scope = 2（自定义部门）时有意义
+CREATE TABLE IF NOT EXISTS sys_role_dept (
+  role_id BIGINT NOT NULL COMMENT '角色ID',
+  dept_id BIGINT NOT NULL COMMENT '部门ID',
+  PRIMARY KEY (role_id, dept_id),
+  KEY idx_sys_role_dept_dept (dept_id)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='角色自定义数据权限部门关联';
+
 CREATE TABLE IF NOT EXISTS sys_dept (
   id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
   parent_id    BIGINT      NOT NULL DEFAULT 0      COMMENT '父部门ID，0为根',
@@ -111,6 +124,9 @@ CREATE TABLE IF NOT EXISTS sys_dept (
   phone        VARCHAR(32)     NULL                COMMENT '联系电话',
   sort         INT         NOT NULL DEFAULT 0      COMMENT '排序',
   status       TINYINT     NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
+  -- 从根到直接父级的祖先部门 id，逗号分隔，不含自身；顶级部门（parent_id=0）为空串。
+  -- 由 SysDeptService 维护，供"本部门及以下"用 FIND_IN_SET 判断下级关系（5.7-safe）。
+  ancestors    VARCHAR(500) NOT NULL DEFAULT ''     COMMENT '祖先部门id，逗号分隔',
   create_by    BIGINT          NULL                COMMENT '创建人',
   create_time  DATETIME        NULL                COMMENT '创建时间',
   update_by    BIGINT          NULL                COMMENT '更新人',

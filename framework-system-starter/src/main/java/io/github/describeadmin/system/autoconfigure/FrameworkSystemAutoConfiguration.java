@@ -1,5 +1,6 @@
 package io.github.describeadmin.system.autoconfigure;
 
+import io.github.describeadmin.mybatis.api.DataScopeTableCustomizer;
 import io.github.describeadmin.security.api.AuthUserLoader;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityAutoConfiguration;
 import io.github.describeadmin.system.core.DbAuthUserLoader;
@@ -53,5 +54,17 @@ public class FrameworkSystemAutoConfiguration {
     public DbAuthUserLoader dbAuthUserLoader(SysUserService userService,
                                              SysRelationMapper relationMapper) {
         return new DbAuthUserLoader(userService, relationMapper);
+    }
+
+    /**
+     * 登记 {@code sys_user} 参与数据权限过滤。
+     *
+     * <p>其余系统管理表（角色/菜单/部门）不登记——它们是权限体系自身的配置数据，
+     * 不是"业务数据"，不该被数据权限过滤掉，否则一个只有"本部门"范围的管理员
+     * 会连部门树、菜单树都查不全，界面直接坏掉。
+     */
+    @Bean
+    public DataScopeTableCustomizer sysUserDataScopeTableCustomizer() {
+        return tableToDeptColumn -> tableToDeptColumn.put("sys_user", "dept_id");
     }
 }

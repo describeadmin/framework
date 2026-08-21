@@ -26,6 +26,13 @@
 - `BaseController` 新增 `permPrefix()` 与 `requirePermission(String)` 两个
   `protected` 方法。子类若已有同名方法会与之冲突。
   构造函数签名未变，既有业务 Controller 无需改动。
+- **`sys_dept` 新增 `ancestors` 列，`sys_role` 新增 `data_scope` 列，新增
+  `sys_role_dept` 表**（数据权限）。`CREATE TABLE IF NOT EXISTS` 不会给已存在的表加列，
+  升级前已建库的开发/测试环境需要重建。0.2.0 尚未发布到 Central、此时还没有真实业主库，
+  是这条表结构变更成本最低的时间点。
+- `AuthUser` / `LoginUser` 的构造函数新增 `deptId`、`dataScope`、`customDeptIds` 三个参数。
+  保留了不含这三项的旧构造函数重载，业务方自定义的 `AuthUserLoader` 实现无需改动即可编译通过，
+  只是新用户会退回 `DataScopeType.ALL`（不过滤）。
 
 ### New Features
 
@@ -118,6 +125,28 @@
   代价是把分页配置逻辑复制一份，之后框架改了这里复制出去的那份不会跟着改。
 - 顺序不是随意定的：多租户、动态表名、数据权限这类**改写 SQL** 的拦截器必须先于分页，
   否则分页的 count 语句基于未改写的 SQL 生成，会统计出被改写条件排除掉的行。
+
+**数据权限**（阶段 D，若依同款的五档模型：全部 / 自定义部门 / 本部门 / 本部门及以下 / 仅本人）
+
+- 直接复用 MyBatis-Plus 自带的 `DataPermissionInterceptor`（已随 `mybatis-plus-jsqlparser`
+  引入，不新增依赖），按表名注入 WHERE 条件，覆盖 SELECT/UPDATE/DELETE——连
+  `BaseController.get()/update()/delete()` 这类走 `selectById`/`updateById` 的路径
+  也管得到，不止是分页列表。上面这条 `InnerInterceptor` 扩展缝新增后第一次派上用场。
+- 范围挂在角色（`sys_role.data_scope`）上，不挂在部门/岗位——框架目前没有"岗位"概念。
+  一个用户身兼多角色时取全部角色里最宽松的一档生效（全部 > 本部门及以下 > 自定义部门 >
+  本部门 > 仅本人），这是刻意选的简单规则；多角色按 OR 取并集留作后续增强。
+- 表要不要参与过滤是显式登记（`DataScopeTableCustomizer`，与收集自定义拦截器同一手法），
+  不做注解 + 反射扫描。`framework-system-starter` 只登记了 `sys_user`——角色/菜单/部门本身
+  是权限体系的配置数据，不应被数据权限过滤掉。
+- `sys_dept` 新增 `ancestors` 物化路径列（逗号分隔的祖先部门 id，不含自身），
+  `FIND_IN_SET` 判断"是否是下级部门"，5.7-safe，不依赖 CTE。移动部门时
+  `SysDeptService` 会级联更新全部子孙的 `ancestors`，并拒绝把部门移动到自己的子部门下
+  （防止路径成环）。
+- 新增配置项 `describeadmin.mybatis.data-scope.enabled`（默认 `true`）。
+- `GET`/`PUT /api/system/role/{roleId}/depts`：自定义数据权限的部门列表，
+  权限点 `system:role:assign-dept`，与已有的 `.../menus` 同一"重建"语义。
+- ADMIN 角色的 `data_scope` 由种子数据显式置为"全部"，代码里不特判 `role_code == 'ADMIN'`，
+  与 ADMIN 靠种子数据被授予全部菜单是同一手法。
 
 ### Bug Fixes
 

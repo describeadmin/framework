@@ -47,12 +47,68 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 | 模块 | 给你什么 |
 |---|---|
 | `framework-bom` | 统一版本仲裁 |
-| `framework-common` | `Result<T>` 统一响应结构、全局异常处理器 |
+| `framework-common` | `Result<T>` 统一响应结构、全局异常处理器、`PermissionChecker` / `FrameworkVersion` 契约 |
 | `framework-web-starter` | traceId 贯穿请求与日志 |
-| `framework-security-starter` | 不透明令牌认证、`AuthProvider` / `TokenStore` SPI、按钮级权限 |
-| `framework-mybatis-starter` | `BaseEntity` / `BaseService` / `BaseController` 基类，审计字段与逻辑删除 |
-| `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门管理（含建表与种子 SQL） |
+| `framework-security-starter` | 不透明令牌认证、`AuthProvider` / `TokenStore` SPI、服务端权限点校验、登录失败锁定、在线会话枚举 |
+| `framework-cache-starter` | `CacheProvider` 缓存契约与零依赖内存实现 |
+| `framework-mybatis-starter` | `BaseEntity` / `BaseService` / `BaseController` 基类，审计字段、逻辑删除、拦截器链扩展缝、数据权限拦截器 |
+| `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门 / 在线用户管理 + 数据权限（含建表与种子 SQL） |
 | `describeadmin-archetype` | 业务方工程脚手架，与框架同版本发布 |
+
+## 已完成的后端能力
+
+> Maven Central 当前可发布版本是 **0.1.1**；下表含已在本仓库开发分支完成、
+> 尚待合并与发布的 **0.2.0** 能力（合并与发布进度见
+> [`docs/PROGRESS.md`](https://github.com/describeadmin/docs/blob/main/PROGRESS.md)）。
+> 逐条变更见 [CHANGELOG.md](./CHANGELOG.md)。
+
+**认证与权限**（`framework-security-starter` + `framework-system-starter`）
+
+- `POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`、
+  `GET /api/auth/menus`（当前用户菜单树）、`GET /api/auth/providers`（已启用的登录方式）
+- 不透明令牌（非 JWT）：默认内存实现，可整体换成 Redis 等集中式实现而上层代码不变；
+  支持"禁用账号立即失效""强制下线"
+- **服务端权限点校验**：`BaseController` 的五个通用端点与自定义端点均按
+  `<模块>:<对象>:<动作>` 校验，不再只是前端按钮显隐
+- 登录失败锁定：连续失败达阈值后按用户名暂时锁定，对不存在的账号同样计数以避免账号枚举
+
+**系统管理**（`framework-system-starter`，均为 `Result<T>` 响应 + 逻辑删除）
+
+- 用户：列表/详情/改密（`PUT .../{userId}/password`）、角色分配（`GET`/`PUT .../{userId}/roles`）；
+  建号需走 `POST .../with-password`，通用建号端点已显式禁用以避免明文密码落库
+- 角色：标准 CRUD + 菜单授权（`GET`/`PUT .../{roleId}/menus`）
+- 菜单：标准 CRUD + 全量树（`GET .../tree`）
+- 部门：标准 CRUD + 树形查询（`GET .../tree`）
+- 在线用户：会话列表与强制下线（`GET`/`DELETE /api/system/online`），直接读
+  `TokenStore`，不落表，因此没有对应数据库表
+
+**数据权限**（`framework-mybatis-starter` + `framework-system-starter`，若依同款的五档模型）
+
+- 全部 / 自定义部门 / 本部门 / 本部门及以下 / 仅本人，挂在角色（`sys_role.data_scope`）上；
+  一个用户身兼多角色时取全部角色里最宽松的一档生效
+- 复用 MyBatis-Plus 自带的 `DataPermissionInterceptor` 按表名注入 WHERE 条件，覆盖
+  SELECT/UPDATE/DELETE——连 `BaseController.get()/update()/delete()` 这类走
+  `selectById`/`updateById` 的路径也管得到，不止是分页列表
+- 表要不要参与过滤是显式登记（`DataScopeTableCustomizer`），默认不影响业务方自己的表
+- `sys_dept` 新增 `ancestors` 物化路径列支撑"本部门及以下"，移动部门时自动级联更新
+  全部子孙的路径，并拒绝把部门移动到自己的子部门下
+- `GET`/`PUT /api/system/role/{roleId}/depts`：自定义数据权限的部门列表
+- 新增配置项 `describeadmin.mybatis.data-scope.enabled`（默认 `true`）
+
+**缓存契约**（新模块 `framework-cache-starter`）
+
+- `CacheProvider`：`put` / `get` / `evict` / `increment` 四个方法，默认零依赖内存实现（带容量上限）
+- 集中式实现以插件形式提供——第一个插件 `framework-cache-redis-starter` 已独立成仓（未发布到 npm/Central）
+
+**持久层扩展缝**（`framework-mybatis-starter`）
+
+- `MybatisPlusInterceptor` 收集容器内全部 `InnerInterceptor` Bean 并按 `@Order` 排序，
+  插件可挂多租户 / 数据权限等改写 SQL 的拦截器，无需整体覆盖分页配置
+
+**插件版本自检**（`framework-common`）
+
+- `FrameworkVersion.requireCompatible()`：插件启动期校验所需的最低框架版本，
+  把运行期才会暴露的 `NoSuchMethodError` 提前成启动失败 + 可操作的错误信息
 
 ## 两条容易被"顺手升级"掉的约定
 

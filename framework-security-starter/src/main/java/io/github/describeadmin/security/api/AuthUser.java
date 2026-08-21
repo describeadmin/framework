@@ -1,5 +1,7 @@
 package io.github.describeadmin.security.api;
 
+import io.github.describeadmin.common.api.DataScopeType;
+
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Collections;
@@ -30,8 +32,24 @@ public class AuthUser implements Serializable {
     private final Set<String> roles;
     private final Set<String> permissions;
 
+    /** 所属部门 ID；数据权限的 {@code DEPT}/{@code DEPT_AND_CHILD} 档据此生效，可为 null。 */
+    private final Long deptId;
+
+    /** 全部角色合并后的有效数据权限范围，见 {@link DataScopeType}。 */
+    private final DataScopeType dataScope;
+
+    /** {@code dataScope} 为 {@link DataScopeType#CUSTOM} 时的部门 ID 集合，其余档为空集。 */
+    private final Set<Long> customDeptIds;
+
     public AuthUser(Long userId, String username, String passwordHash, String nickname,
                     boolean enabled, Set<String> roles, Set<String> permissions) {
+        this(userId, username, passwordHash, nickname, enabled, roles, permissions,
+                null, DataScopeType.ALL, Set.of());
+    }
+
+    public AuthUser(Long userId, String username, String passwordHash, String nickname,
+                    boolean enabled, Set<String> roles, Set<String> permissions,
+                    Long deptId, DataScopeType dataScope, Set<Long> customDeptIds) {
         this.userId = userId;
         this.username = username;
         this.passwordHash = passwordHash;
@@ -39,6 +57,9 @@ public class AuthUser implements Serializable {
         this.enabled = enabled;
         this.roles = immutable(roles);
         this.permissions = immutable(permissions);
+        this.deptId = deptId;
+        this.dataScope = dataScope == null ? DataScopeType.ALL : dataScope;
+        this.customDeptIds = immutableLong(customDeptIds);
     }
 
     private static Set<String> immutable(Set<String> src) {
@@ -46,9 +67,15 @@ public class AuthUser implements Serializable {
                 : Collections.unmodifiableSet(new LinkedHashSet<>(src));
     }
 
+    private static Set<Long> immutableLong(Set<Long> src) {
+        return src == null ? Collections.emptySet()
+                : Collections.unmodifiableSet(new LinkedHashSet<>(src));
+    }
+
     /** 转换为对外流通的登录用户，<b>丢弃密码哈希</b>。 */
     public LoginUser toLoginUser(String authType) {
-        return new LoginUser(userId, username, nickname, authType, roles, permissions);
+        return new LoginUser(userId, username, nickname, authType, roles, permissions,
+                deptId, dataScope, customDeptIds);
     }
 
     public Long getUserId() {
@@ -77,5 +104,17 @@ public class AuthUser implements Serializable {
 
     public Set<String> getPermissions() {
         return permissions;
+    }
+
+    public Long getDeptId() {
+        return deptId;
+    }
+
+    public DataScopeType getDataScope() {
+        return dataScope;
+    }
+
+    public Set<Long> getCustomDeptIds() {
+        return customDeptIds;
     }
 }

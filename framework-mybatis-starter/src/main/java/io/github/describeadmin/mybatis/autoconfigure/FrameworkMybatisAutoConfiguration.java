@@ -1,17 +1,26 @@
 package io.github.describeadmin.mybatis.autoconfigure;
 
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.DataPermissionInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.OptimisticLockerInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import io.github.describeadmin.common.api.CurrentUserProvider;
+import io.github.describeadmin.common.api.DataScopeProvider;
+import io.github.describeadmin.mybatis.api.DataScopeTableCustomizer;
 import io.github.describeadmin.mybatis.core.AuditMetaObjectHandler;
+import io.github.describeadmin.mybatis.core.DeptDataPermissionHandler;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.annotation.Order;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * framework-mybatis-starter 的自动配置。
@@ -60,6 +69,36 @@ public class FrameworkMybatisAutoConfiguration {
         interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
 
         return interceptor;
+    }
+
+    /**
+     * 数据权限拦截器。
+     *
+     * <p>本身就是一个 {@link InnerInterceptor}，会被上面 {@code mybatisPlusInterceptor()}
+     * 里已有的 {@code ObjectProvider<InnerInterceptor>} 自动收集——那个方法完全不用改，
+     * 这正是 0.2.0 预留那条扩展缝的意义。
+     *
+     * <p>表要不要参与过滤靠 {@link DataScopeTableCustomizer} 显式登记（见
+     * {@code FrameworkSystemAutoConfiguration} 里给 {@code sys_user} 登记的例子），
+     * 未登记的表不受影响。{@link DataScopeProvider} 缺失（未引入
+     * framework-security-starter）时退回 {@link DataScopeProvider#NOOP}，等同于不过滤。
+     *
+     * <p>不加 {@code @ConditionalOnMissingBean}：{@code InnerInterceptor} 允许同时存在多个
+     * （多租户、数据权限等各自注册一个），按类型"缺失才生效"的条件在这里没有意义，
+     * 想禁用只需要关掉下面的配置开关。
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "describeadmin.mybatis.data-scope", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    @Order(0)
+    public InnerInterceptor dataPermissionInnerInterceptor(
+            ObjectProvider<DataScopeTableCustomizer> tableCustomizers,
+            ObjectProvider<DataScopeProvider> dataScopeProvider) {
+        Map<String, String> tableToDeptColumn = new HashMap<>();
+        tableCustomizers.orderedStream().forEach(customizer -> customizer.customize(tableToDeptColumn));
+        DeptDataPermissionHandler handler = new DeptDataPermissionHandler(
+                tableToDeptColumn, dataScopeProvider.getIfAvailable(() -> DataScopeProvider.NOOP));
+        return new DataPermissionInterceptor(handler);
     }
 
     /**

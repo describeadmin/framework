@@ -3,6 +3,7 @@ package io.github.describeadmin.security.autoconfigure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.describeadmin.cache.api.CacheProvider;
 import io.github.describeadmin.common.api.CurrentUserProvider;
+import io.github.describeadmin.common.api.DataScopeProvider;
 import io.github.describeadmin.common.api.PermissionChecker;
 import io.github.describeadmin.security.api.AuthProvider;
 import io.github.describeadmin.security.api.AuthUserLoader;
@@ -12,6 +13,7 @@ import io.github.describeadmin.security.core.InMemoryTokenStore;
 import io.github.describeadmin.security.core.LoginAttemptGuard;
 import io.github.describeadmin.security.core.ResultAuthenticationEntryPoint;
 import io.github.describeadmin.security.core.SecurityContextCurrentUserProvider;
+import io.github.describeadmin.security.core.SecurityContextDataScopeProvider;
 import io.github.describeadmin.security.core.SecurityContextPermissionChecker;
 import io.github.describeadmin.security.core.SecurityExceptionHandler;
 import io.github.describeadmin.security.core.TokenAuthenticationFilter;
@@ -136,6 +138,17 @@ public class FrameworkSecurityAutoConfiguration {
     @ConditionalOnMissingBean(CurrentUserProvider.class)
     public CurrentUserProvider securityContextCurrentUserProvider() {
         return new SecurityContextCurrentUserProvider();
+    }
+
+    /**
+     * 把 SecurityContext 里登录用户的部门/数据范围暴露给 framework-common 的
+     * {@link DataScopeProvider} 契约，使 framework-mybatis-starter 的数据权限拦截器
+     * 能在不依赖 Spring Security 的前提下做行级过滤。
+     */
+    @Bean
+    @ConditionalOnMissingBean(DataScopeProvider.class)
+    public DataScopeProvider securityContextDataScopeProvider() {
+        return new SecurityContextDataScopeProvider();
     }
 
     /**
