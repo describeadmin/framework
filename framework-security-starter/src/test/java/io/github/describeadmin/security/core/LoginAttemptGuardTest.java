@@ -136,4 +136,50 @@ class LoginAttemptGuardTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(cache).isNotNull();
     }
+
+    @Test
+    @DisplayName("listLockedUsernames 只列出达到阈值的用户名，未锁定的不出现")
+    void listLockedUsernamesOnlyIncludesLockedOnes() {
+        LoginAttemptGuard guard = guard(2, Duration.ofMinutes(15));
+        guard.recordFailure("alice");
+        guard.recordFailure("alice");
+        guard.recordFailure("bob"); // 未达阈值
+
+        assertThat(guard.listLockedUsernames()).containsExactly("alice");
+    }
+
+    @Test
+    @DisplayName("没有账号被锁定时返回空集合")
+    void listLockedUsernamesEmptyWhenNoneLocked() {
+        LoginAttemptGuard guard = guard(2, Duration.ofMinutes(15));
+        guard.recordFailure("alice");
+
+        assertThat(guard.listLockedUsernames()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("手动解锁后立即可以重新尝试登录")
+    void unlockAllowsImmediateRetry() {
+        LoginAttemptGuard guard = guard(1, Duration.ofMinutes(15));
+        guard.recordFailure("alice");
+        assertThatThrownBy(() -> guard.assertNotLocked("alice")).isInstanceOf(BizException.class);
+
+        guard.unlock("alice");
+
+        assertThatNoException().isThrownBy(() -> guard.assertNotLocked("alice"));
+        assertThat(guard.listLockedUsernames()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("解锁只影响当事账号，不波及其他人")
+    void unlockOnlyAffectsTargetAccount() {
+        LoginAttemptGuard guard = guard(1, Duration.ofMinutes(15));
+        guard.recordFailure("alice");
+        guard.recordFailure("bob");
+
+        guard.unlock("alice");
+
+        assertThatNoException().isThrownBy(() -> guard.assertNotLocked("alice"));
+        assertThatThrownBy(() -> guard.assertNotLocked("bob")).isInstanceOf(BizException.class);
+    }
 }

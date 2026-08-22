@@ -2,6 +2,7 @@ package io.github.describeadmin.cache.api;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 键值缓存契约。
@@ -64,4 +65,22 @@ public interface CacheProvider {
      * @return 自增后的值
      */
     long increment(String key, long delta, Duration ttlWhenCreated);
+
+    /**
+     * 按前缀列出当前存在的 key（不解析值内容）。
+     *
+     * <p><b>为什么是 default 方法</b>：本方法是在接口发布之后新增的，写成抽象方法会让
+     * 所有已实现 {@code CacheProvider} 的业务方直接编译失败。默认返回空集合，语义是
+     * "本实现不支持按前缀枚举"，手法同 {@code TokenStore.listActive()}。
+     *
+     * <p>仅用于低频的管理侧可观测性场景（例如查询当前有哪些账号处于登录锁定状态），
+     * <b>不要用于高频路径</b>——集中式实现（如 Redis）按前缀枚举的开销远高于单键读写，
+     * 且实现必须避免使用会阻塞整个存储的全量扫描方式。
+     *
+     * @param prefix 缓存键前缀，不为空
+     * @return 匹配前缀且未过期的 key 集合；不支持枚举时返回空集合，<b>不要抛异常</b>
+     */
+    default Set<String> keysWithPrefix(String prefix) {
+        return Set.of();
+    }
 }

@@ -183,4 +183,36 @@ class InMemoryCacheProviderTest {
                     .isInstanceOf(IllegalArgumentException.class);
         }
     }
+
+    @Nested
+    @DisplayName("按前缀枚举")
+    class KeysWithPrefix {
+
+        @Test
+        @DisplayName("只返回匹配前缀的 key")
+        void onlyMatchingPrefixReturned() {
+            cache.put("describeadmin:login:fail:alice", 1L, Duration.ofMinutes(1));
+            cache.put("describeadmin:login:fail:bob", 1L, Duration.ofMinutes(1));
+            cache.put("describeadmin:other:thing", 1L, Duration.ofMinutes(1));
+
+            assertThat(cache.keysWithPrefix("describeadmin:login:fail:"))
+                    .containsExactlyInAnyOrder(
+                            "describeadmin:login:fail:alice", "describeadmin:login:fail:bob");
+        }
+
+        @Test
+        @DisplayName("已过期的 key 不出现在结果里")
+        void expiredKeysAreExcluded() throws Exception {
+            cache.put("describeadmin:login:fail:alice", 1L, Duration.ofMillis(30));
+            Thread.sleep(60);
+
+            assertThat(cache.keysWithPrefix("describeadmin:login:fail:")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("没有匹配项时返回空集合，不返回 null")
+        void noMatchReturnsEmptySet() {
+            assertThat(cache.keysWithPrefix("no-such-prefix:")).isEmpty();
+        }
+    }
 }

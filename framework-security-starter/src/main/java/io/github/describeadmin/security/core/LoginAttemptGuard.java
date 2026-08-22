@@ -5,7 +5,9 @@ import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.ResultCode;
 
 import java.time.Duration;
+import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 登录失败次数限制。
@@ -62,6 +64,34 @@ public class LoginAttemptGuard {
 
     /** 登录成功后调用，清零计数。 */
     public void reset(String username) {
+        cache.evict(keyOf(username));
+    }
+
+    /**
+     * 当前处于锁定状态的用户名集合（已去掉 {@link #KEY_PREFIX}，均为小写形式——
+     * 见 {@link #keyOf(String)} 里统一大小写的处理）。
+     *
+     * <p>供管理侧"当前有哪些账号被锁定"的只读查询使用，不在登录主链路上调用。
+     * 依赖 {@link CacheProvider#keysWithPrefix(String)}，若底层 {@code CacheProvider}
+     * 不支持按前缀枚举（返回默认空集合），本方法同样返回空集合，不抛异常。
+     */
+    public Set<String> listLockedUsernames() {
+        Set<String> locked = new LinkedHashSet<>();
+        for (String key : cache.keysWithPrefix(KEY_PREFIX)) {
+            long failures = cache.get(key, Long.class).orElse(0L);
+            if (failures >= maxFailures) {
+                locked.add(key.substring(KEY_PREFIX.length()));
+            }
+        }
+        return locked;
+    }
+
+    /**
+     * 管理员手动解锁：清除某用户名的失败计数，效果等同于提前到点自动解锁。
+     *
+     * @param username 登录名，大小写不敏感（见 {@link #keyOf(String)}）
+     */
+    public void unlock(String username) {
         cache.evict(keyOf(username));
     }
 

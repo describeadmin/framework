@@ -5,8 +5,10 @@ import io.github.describeadmin.cache.api.CacheProvider;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -115,6 +117,19 @@ public class InMemoryCacheProvider implements CacheProvider {
     public int size() {
         sweepExpired();
         return store.size();
+    }
+
+    @Override
+    public Set<String> keysWithPrefix(String prefix) {
+        requireKey(prefix);
+        Instant now = Instant.now();
+        Set<String> result = new LinkedHashSet<>();
+        for (Map.Entry<String, Entry> e : store.entrySet()) {
+            if (e.getKey().startsWith(prefix) && !e.getValue().expiresAt().isBefore(now)) {
+                result.add(e.getKey());
+            }
+        }
+        return result;
     }
 
     private void afterWrite() {

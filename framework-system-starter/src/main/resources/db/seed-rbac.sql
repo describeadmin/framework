@@ -324,6 +324,27 @@ FROM sys_menu m
 WHERE m.perm_code = 'system:oper-log:list' AND m.deleted = 0
   AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:oper-log:remove' AND deleted = 0);
 
+-- -----------------------------------------------------------------------------
+-- 登录锁定可观测性（docs/LOGIN_MODULE_AUDIT.md D 项）。暂无前端管理页面，
+-- 先注册权限点避免 403；页面落地后把下面 MENU 那一行的 visible 改成 1
+-- （先例是 system:online 当年同样经历过的过渡状态，见上方注释）。
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '登录锁定', 'MENU', 'system:security:list', '/system/security', 'system/security/index',
+       'lucide:lock', 9, 0, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:security:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '解锁', 'BUTTON', 'system:security:unlock', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:security:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:security:unlock' AND deleted = 0);
+
 -- ADMIN 角色授予全部菜单
 INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT r.id, m.id
