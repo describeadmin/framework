@@ -4,6 +4,7 @@ import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.security.api.AuthRequest;
+import io.github.describeadmin.security.api.IssuedTokens;
 import io.github.describeadmin.security.api.LoginResult;
 import io.github.describeadmin.security.api.LoginUser;
 import io.github.describeadmin.security.api.TokenStore;
@@ -12,11 +13,13 @@ import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.service.SysMenuService;
+import io.github.describeadmin.system.service.SysUserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,15 +41,18 @@ public class AuthController {
     private final SysMenuService menuService;
     private final TokenStore tokenStore;
     private final FrameworkSecurityProperties securityProperties;
+    private final SysUserService userService;
 
     public AuthController(AuthProviderRegistry registry,
                           SysMenuService menuService,
                           TokenStore tokenStore,
-                          FrameworkSecurityProperties securityProperties) {
+                          FrameworkSecurityProperties securityProperties,
+                          SysUserService userService) {
         this.registry = registry;
         this.menuService = menuService;
         this.tokenStore = tokenStore;
         this.securityProperties = securityProperties;
+        this.userService = userService;
     }
 
     /**
@@ -66,14 +72,48 @@ public class AuthController {
      *
      * <p>除 type 外的字段整体透传给对应 AuthProvider，
      * 因此新增登录方式不需要改本接口的签名。
+     *
+     * <p>是否签发 refresh token 由 {@code describeadmin.security.refresh-token.enabled} 控制
+     * （默认开启）。关闭时退回只签发 access token，{@code LoginResult.refreshToken} 为 null，
+     * 前端应据此不再调用 {@link #refresh(Map)}。
      */
     @PostMapping("/login")
     public Result<LoginResult> login(@RequestBody Map<String, Object> body) {
         String type = String.valueOf(body.getOrDefault("type", "password"));
         LoginUser user = registry.authenticate(new AuthRequest(type, body));
-        String token = tokenStore.issue(user);
+        IssuedTokens tokens = securityProperties.getRefreshToken().isEnabled()
+                ? tokenStore.issueWithRefresh(user)
+                : new IssuedTokens(tokenStore.issue(user), null);
         return Result.ok(new LoginResult(
-                token, securityProperties.getTokenTtl().toSeconds(), user));
+                tokens.getAccessToken(), tokens.getRefreshToken(),
+                securityProperties.getTokenTtl().toSeconds(),
+                tokens.getRefreshToken() == null ? 0 : securityProperties.getRefreshToken().getTtl().toSeconds(),
+                user));
+    }
+
+    /**
+     * 用 refresh token 换发新的一对令牌。
+     *
+     * <p><b>刻意不挂 {@code @PreAuthorize}、不要求已登录</b>——本端点存在的意义就是
+     * "access token 已过期、调用方此刻还不是一个已认证的请求"，挂权限校验会自相矛盾。
+     * 校验完全下沉到 {@link TokenStore#refresh(String)} 内部（是否存在、是否过期、
+     * 是否已被使用/吊销）。需要加入 {@code permit-all}，见
+     * {@code FrameworkSecurityAutoConfiguration.BUILT_IN_PERMIT_ALL}。
+     *
+     * <p>刷新只延长会话，不会重新拉取角色/权限——与"权限快照在登录时确定"是同一既有取舍，
+     * 见 {@link TokenStore#refresh(String)} 的 javadoc。
+     */
+    @PostMapping("/refresh")
+    public Result<LoginResult> refresh(@RequestBody Map<String, String> body) {
+        IssuedTokens tokens = tokenStore.refresh(body.get("refreshToken"))
+                .orElseThrow(() -> new BizException(ResultCode.UNAUTHORIZED, "刷新令牌无效或已过期，请重新登录"));
+        LoginUser user = tokenStore.resolve(tokens.getAccessToken())
+                .orElseThrow(() -> new BizException(ResultCode.UNAUTHORIZED, "刷新失败，请重新登录"));
+        return Result.ok(new LoginResult(
+                tokens.getAccessToken(), tokens.getRefreshToken(),
+                securityProperties.getTokenTtl().toSeconds(),
+                securityProperties.getRefreshToken().getTtl().toSeconds(),
+                user));
     }
 
     /**
@@ -113,6 +153,21 @@ public class AuthController {
     @GetMapping("/menus")
     public Result<List<SysMenu>> menus() {
         return Result.ok(menuService.treeOf(currentUser().getUserId()));
+    }
+
+    /**
+     * 自助改密：当前登录用户修改自己的密码。
+     *
+     * <p>与 {@code SysUserController#resetPassword}（管理员改别人，需要 {@code system:user:edit}
+     * 权限）是两条不同的路径——这里操作对象永远是"当前登录用户"，任何已登录账号都能调用，
+     * 不需要挂具体权限点。校验旧密码、吊销全部令牌都收在
+     * {@link SysUserService#changeOwnPassword(Long, String, String)} 一个事务方法里，
+     * 避免调用方漏掉吊销这一步。
+     */
+    @PutMapping("/password")
+    public Result<Void> changePassword(@RequestBody Map<String, String> body) {
+        userService.changeOwnPassword(currentUser().getUserId(), body.get("oldPassword"), body.get("newPassword"));
+        return Result.ok();
     }
 
     private LoginUser currentUser() {

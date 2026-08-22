@@ -4,6 +4,7 @@ import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseController;
+import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.system.core.OperLog;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.SysUserMapper;
@@ -31,9 +32,11 @@ import java.util.Map;
 public class SysUserController extends BaseController<SysUserService, SysUserMapper, SysUser> {
 
     private final SysUserService service;
+    private final TokenStore tokenStore;
 
-    public SysUserController(SysUserService service) {
+    public SysUserController(SysUserService service, TokenStore tokenStore) {
         this.service = service;
+        this.tokenStore = tokenStore;
     }
 
     @Override
@@ -77,6 +80,10 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
      * {@code entity.password} 必然是 null，而 {@link SysUser#getPassword()}
      * 已经用 {@code @TableField(updateStrategy = NOT_NULL)} 锁住，null 不会覆盖已有密码，
      * 不需要 controller 层再处理一遍。
+     *
+     * <p>把 {@code status} 显式改为禁用值（0）时顺带吊销该用户的全部令牌——否则被禁用的账号
+     * 已登录的会话仍然有效，要等令牌自然过期才失效，与"禁用立即生效"的直觉预期不符
+     * （见 {@link TokenStore#revokeAllOf(Long)} 的 javadoc）。改其他字段不触发吊销。
      */
     @Override
     @OperLog(module = "system:user", description = "更新用户")
@@ -87,6 +94,9 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         entity.setId(id);
         if (!service.updateById(entity)) {
             throw new BizException(ResultCode.NOT_FOUND, "记录不存在或已被他人修改: " + id);
+        }
+        if (entity.getStatus() != null && entity.getStatus() == 0) {
+            tokenStore.revokeAllOf(id);
         }
         return Result.ok(service.getById(id));
     }
