@@ -62,10 +62,33 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         SysUser u = new SysUser();
         u.setUsername(asString(body.get("username")));
         u.setNickname(asString(body.get("nickname")));
+        u.setMobile(asString(body.get("mobile")));
+        u.setEmail(asString(body.get("email")));
         if (body.get("deptId") != null) {
             u.setDeptId(Long.valueOf(String.valueOf(body.get("deptId"))));
         }
         return Result.ok(service.createUser(u, asString(body.get("password")), asIdList(body.get("roleIds"))));
+    }
+
+    /**
+     * 覆写通用编辑端点，补手机号/邮箱唯一性校验——BaseController.update() 没有这个钩子。
+     *
+     * <p>密码字段不在这里处理：编辑表单不会把密码哈希原样带回来，反序列化后
+     * {@code entity.password} 必然是 null，而 {@link SysUser#getPassword()}
+     * 已经用 {@code @TableField(updateStrategy = NOT_NULL)} 锁住，null 不会覆盖已有密码，
+     * 不需要 controller 层再处理一遍。
+     */
+    @Override
+    @OperLog(module = "system:user", description = "更新用户")
+    @PreAuthorize("hasAuthority('system:user:edit')")
+    @PutMapping("/{id}")
+    public Result<SysUser> update(@PathVariable Long id, @RequestBody SysUser entity) {
+        service.assertMobileEmailAvailable(id, entity.getMobile(), entity.getEmail());
+        entity.setId(id);
+        if (!service.updateById(entity)) {
+            throw new BizException(ResultCode.NOT_FOUND, "记录不存在或已被他人修改: " + id);
+        }
+        return Result.ok(service.getById(id));
     }
 
     @OperLog(module = "system:user", description = "重置密码")

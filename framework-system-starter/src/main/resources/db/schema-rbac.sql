@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS sys_user (
   username     VARCHAR(64)  NOT NULL                COMMENT '登录名',
   password     VARCHAR(100) NOT NULL                COMMENT '密码（BCrypt 哈希）',
   nickname     VARCHAR(64)      NULL                COMMENT '昵称',
+  -- 手机号/邮箱：核心的常规联系方式字段，可空。是否存在对应的登录方式（短信/邮箱验证码）
+  -- 取决于有没有装配对应的 AuthProvider 插件，字段本身跟登录方式无关，参见 CLAUDE.md 4.6 的例外说明
+  mobile       VARCHAR(20)      NULL                COMMENT '手机号，可空，非空时应用层保证唯一',
+  email        VARCHAR(128)     NULL                COMMENT '邮箱，可空，非空时应用层保证唯一',
   dept_id      BIGINT           NULL                COMMENT '所属部门ID',
   status       TINYINT      NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
   create_by    BIGINT           NULL                COMMENT '创建人',
@@ -29,9 +33,11 @@ CREATE TABLE IF NOT EXISTS sys_user (
   deleted      TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除：0未删 1已删',
   version      INT          NOT NULL DEFAULT 0      COMMENT '乐观锁版本号',
   PRIMARY KEY (id),
-  -- 注意：逻辑删除下不能对 username 建唯一索引，否则删除后无法复用同名账号。
+  -- 注意：逻辑删除下不能对 username/mobile/email 建唯一索引，否则删除后无法复用同名账号/手机号/邮箱。
   -- 唯一性由应用层在「未删除」范围内校验。
-  KEY idx_sys_user_username (username)
+  KEY idx_sys_user_username (username),
+  KEY idx_sys_user_mobile (mobile),
+  KEY idx_sys_user_email (email)
 ) ENGINE=InnoDB
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_general_ci

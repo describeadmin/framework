@@ -38,10 +38,17 @@ public class DbAuthUserLoader implements AuthUserLoader {
     @Override
     public Optional<AuthUser> loadByUsername(String username) {
         SysUser user = userService.findByUsername(username);
-        if (user == null) {
-            return Optional.empty();
-        }
+        return user == null ? Optional.empty() : buildAuthUser(user);
+    }
 
+    @Override
+    public Optional<AuthUser> loadByUserId(Long userId) {
+        SysUser user = userService.getById(userId);
+        return user == null ? Optional.empty() : buildAuthUser(user);
+    }
+
+    /** 由已查到的 {@link SysUser} 拼出角色/权限/数据权限/首页路径俱全的 {@link AuthUser}。 */
+    private Optional<AuthUser> buildAuthUser(SysUser user) {
         List<RoleScope> roleScopes = relationMapper.selectDataScopesByUserId(user.getId());
         DataScopeType dataScope = DataScopeResolver.resolveType(roleScopes);
         Set<Long> customDeptIds = dataScope == DataScopeType.CUSTOM
