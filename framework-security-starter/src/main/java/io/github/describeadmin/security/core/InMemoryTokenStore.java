@@ -1,6 +1,7 @@
 package io.github.describeadmin.security.core;
 
 import io.github.describeadmin.security.api.ActiveSession;
+import io.github.describeadmin.security.api.IssuedTokens;
 import io.github.describeadmin.security.api.LoginUser;
 import io.github.describeadmin.security.api.TokenStore;
 
@@ -38,15 +39,32 @@ public class InMemoryTokenStore implements TokenStore {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
+    /** 未显式指定 refresh token 有效期时的默认值，与 FrameworkSecurityProperties.RefreshToken 的默认值一致。 */
+    private static final Duration DEFAULT_REFRESH_TTL = Duration.ofDays(7);
+
     private final Map<String, Entry> tokens = new ConcurrentHashMap<>();
+    private final Map<String, RefreshEntry> refreshTokens = new ConcurrentHashMap<>();
     private final AtomicLong issueCount = new AtomicLong();
     private final Duration ttl;
+    private final Duration refreshTtl;
 
     public InMemoryTokenStore(Duration ttl) {
+        this(ttl, DEFAULT_REFRESH_TTL);
+    }
+
+    /**
+     * @param ttl        access token 有效期
+     * @param refreshTtl refresh token 有效期，仅在调用 {@link #issueWithRefresh(LoginUser)} 时使用
+     */
+    public InMemoryTokenStore(Duration ttl, Duration refreshTtl) {
         if (ttl == null || ttl.isZero() || ttl.isNegative()) {
             throw new IllegalArgumentException("令牌有效期必须为正数，当前为: " + ttl);
         }
+        if (refreshTtl == null || refreshTtl.isZero() || refreshTtl.isNegative()) {
+            throw new IllegalArgumentException("刷新令牌有效期必须为正数，当前为: " + refreshTtl);
+        }
         this.ttl = ttl;
+        this.refreshTtl = refreshTtl;
     }
 
     @Override
@@ -54,17 +72,20 @@ public class InMemoryTokenStore implements TokenStore {
         if (user == null) {
             throw new IllegalArgumentException("不能为 null 用户签发令牌");
         }
-        // 256 位随机量。令牌是不透明的，本身不携带任何信息，猜中概率可忽略
-        byte[] raw = new byte[32];
-        RANDOM.nextBytes(raw);
-        String token = ENCODER.encodeToString(raw);
-
+        String token = newOpaqueToken();
         Instant now = Instant.now();
         tokens.put(token, new Entry(user, now, now.plus(ttl)));
         if (issueCount.incrementAndGet() % SWEEP_INTERVAL == 0) {
             sweepExpired();
         }
         return token;
+    }
+
+    /** 256 位随机量。令牌是不透明的，本身不携带任何信息，猜中概率可忽略；access/refresh 令牌共用同一套生成方式。 */
+    private static String newOpaqueToken() {
+        byte[] raw = new byte[32];
+        RANDOM.nextBytes(raw);
+        return ENCODER.encodeToString(raw);
     }
 
     @Override
@@ -104,7 +125,42 @@ public class InMemoryTokenStore implements TokenStore {
             }
             return false;
         });
+        // refresh token 必须同步吊销，否则"改密码/禁用立即失效"会被一个仍然有效的
+        // refresh token 绕过——见 TokenStore.revokeAllOf 的 javadoc。
+        refreshTokens.entrySet().removeIf(e -> userId.equals(e.getValue().user().getUserId()));
         return removed[0];
+    }
+
+    @Override
+    public IssuedTokens issueWithRefresh(LoginUser user) {
+        if (user == null) {
+            throw new IllegalArgumentException("不能为 null 用户签发令牌");
+        }
+        String accessToken = issue(user);
+        String refreshToken = newOpaqueToken();
+        refreshTokens.put(refreshToken, new RefreshEntry(user, Instant.now().plus(refreshTtl)));
+        return new IssuedTokens(accessToken, refreshToken);
+    }
+
+    @Override
+    public Optional<IssuedTokens> refresh(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return Optional.empty();
+        }
+        // 轮换：无论成功与否，先把旧的摘掉——refresh token 只能使用一次，
+        // 缩小泄露窗口。remove 而不是 get，避免并发下同一个 refresh token 被用两次。
+        RefreshEntry entry = refreshTokens.remove(refreshToken);
+        if (entry == null || entry.expiresAt().isBefore(Instant.now())) {
+            return Optional.empty();
+        }
+        return Optional.of(issueWithRefresh(entry.user()));
+    }
+
+    @Override
+    public void revokeRefreshToken(String refreshToken) {
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            refreshTokens.remove(refreshToken);
+        }
     }
 
     @Override
@@ -127,10 +183,16 @@ public class InMemoryTokenStore implements TokenStore {
         return sessions;
     }
 
-    /** 当前有效令牌数，供测试与监控使用。 */
+    /** 当前有效 access token 数，供测试与监控使用。 */
     public int size() {
         sweepExpired();
         return tokens.size();
+    }
+
+    /** 当前有效 refresh token 数，供测试使用。 */
+    public int refreshTokenSize() {
+        sweepExpiredRefresh();
+        return refreshTokens.size();
     }
 
     private void sweepExpired() {
@@ -138,6 +200,14 @@ public class InMemoryTokenStore implements TokenStore {
         tokens.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(now));
     }
 
+    private void sweepExpiredRefresh() {
+        Instant now = Instant.now();
+        refreshTokens.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(now));
+    }
+
     private record Entry(LoginUser user, Instant issuedAt, Instant expiresAt) {
+    }
+
+    private record RefreshEntry(LoginUser user, Instant expiresAt) {
     }
 }

@@ -44,9 +44,59 @@ public interface TokenStore {
     /**
      * 吊销某用户的全部令牌（禁用账号、改密码、强制下线）。
      *
+     * <p><b>支持刷新令牌的实现必须同时吊销该用户名下的全部 refresh token</b>——
+     * 否则"改密码/禁用立即失效"会被一个仍然有效的 refresh token 绕过：
+     * access token 过期后，前端拿这个仍有效的 refresh token 换出新的 access token，
+     * 等于本方法什么都没做到。这不是一个可以分批修的独立漏洞，必须与
+     * {@link #issueWithRefresh(LoginUser)} 在同一次改动里落地。
+     *
      * @return 实际吊销的令牌数
      */
     int revokeAllOf(Long userId);
+
+    /**
+     * 同时签发 access/refresh 令牌对。
+     *
+     * <p><b>为什么是 default 方法</b>：本方法是在接口发布之后新增的，写成抽象方法会让
+     * 所有已实现 {@code TokenStore} 的业务方直接编译失败。默认实现只签发 access token，
+     * {@link IssuedTokens#getRefreshToken()} 为 {@code null}，语义是"本实现不支持刷新令牌"——
+     * 前端应据此不再调用 {@code /api/auth/refresh}。
+     *
+     * @param user 认证结果，不为 null
+     */
+    default IssuedTokens issueWithRefresh(LoginUser user) {
+        return new IssuedTokens(issue(user), null);
+    }
+
+    /**
+     * 用 refresh token 换发新的一对令牌。
+     *
+     * <p>支持刷新的实现应当做<b>轮换</b>：换发成功后旧的 refresh token 立即失效，
+     * 缩小泄露窗口——一个 refresh token 只能使用一次。
+     *
+     * <p>刷新只延长会话，<b>不会重新拉取角色/权限</b>——与"权限快照在登录时确定"
+     * 是同一既有取舍（见 docs/CLAUDE.md §4.5 第 3 条）：管理员改了权限后，
+     * 用户仍需重新登录或被 {@link #revokeAllOf(Long)} 才能让新权限生效，
+     * 单纯刷新 access token 不会绕开这一条。
+     *
+     * <p>refresh token 不存在、已过期、已被使用过一次，或已被
+     * {@link #revokeAllOf(Long)}/{@link #revokeRefreshToken(String)} 吊销时返回空
+     * {@link Optional}——<b>不要抛异常</b>，调用方（{@code AuthController}）应将其
+     * 转换为"请重新登录"的语义。
+     *
+     * <p>默认实现返回空，表示"本实现不支持刷新"。
+     */
+    default Optional<IssuedTokens> refresh(String refreshToken) {
+        return Optional.empty();
+    }
+
+    /**
+     * 单独吊销一个 refresh token（例如登出时一并清理）。
+     *
+     * <p>令牌不存在时静默返回。默认空实现。
+     */
+    default void revokeRefreshToken(String refreshToken) {
+    }
 
     /**
      * 列出当前全部在线会话，供"在线用户"管理页使用。

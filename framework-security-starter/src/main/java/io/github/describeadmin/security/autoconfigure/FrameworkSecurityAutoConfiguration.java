@@ -57,6 +57,7 @@ public class FrameworkSecurityAutoConfiguration {
      */
     private static final List<String> BUILT_IN_PERMIT_ALL = List.of(
             "/api/auth/login",
+            "/api/auth/refresh",
             "/api/auth/providers",
             "/actuator/health",
             "/error");
@@ -127,7 +128,7 @@ public class FrameworkSecurityAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(TokenStore.class)
     public TokenStore tokenStore(FrameworkSecurityProperties properties) {
-        return new InMemoryTokenStore(properties.getTokenTtl());
+        return new InMemoryTokenStore(properties.getTokenTtl(), properties.getRefreshToken().getTtl());
     }
 
     /**

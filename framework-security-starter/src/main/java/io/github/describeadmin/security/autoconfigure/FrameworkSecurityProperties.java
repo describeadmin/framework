@@ -62,6 +62,9 @@ public class FrameworkSecurityProperties {
     /** 登录失败次数限制。 */
     private final Lockout lockout = new Lockout();
 
+    /** access/refresh 双令牌。 */
+    private final RefreshToken refreshToken = new RefreshToken();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -104,6 +107,10 @@ public class FrameworkSecurityProperties {
 
     public Lockout getLockout() {
         return lockout;
+    }
+
+    public RefreshToken getRefreshToken() {
+        return refreshToken;
     }
 
     /**
@@ -150,6 +157,45 @@ public class FrameworkSecurityProperties {
 
         public void setDuration(Duration duration) {
             this.duration = duration;
+        }
+    }
+
+    /**
+     * access/refresh 双令牌，前缀 {@code describeadmin.security.refresh-token}。
+     *
+     * <p>关闭后 {@code AuthController.login()} 退回只签发 access token
+     * （{@code IssuedTokens.refreshToken} 为 null），前端应据此不再调用 {@code /auth/refresh}。
+     * 这是不换 {@link io.github.describeadmin.security.api.TokenStore} 实现即可关闭
+     * 刷新令牌策略的开关——两层开关模型（编译期是否具备能力 vs 运行时是否启用）
+     * 在核心内部同样适用。
+     */
+    public static class RefreshToken {
+
+        /** 是否签发 refresh token。 */
+        private boolean enabled = true;
+
+        /**
+         * refresh token 有效期。
+         *
+         * <p>明显长于 access token 的 {@link #tokenTtl}——它存在的意义就是让用户
+         * 不必在 access token 每次过期时都重新输入密码。默认 7 天。
+         */
+        private Duration ttl = Duration.ofDays(7);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Duration getTtl() {
+            return ttl;
+        }
+
+        public void setTtl(Duration ttl) {
+            this.ttl = ttl;
         }
     }
 }
