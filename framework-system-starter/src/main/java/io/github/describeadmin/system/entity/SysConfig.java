@@ -11,7 +11,11 @@ public class SysConfig extends BaseEntity {
     private String configValue;
     private String configName;
 
-    /** 是否内置：Y/N，仅作展示用，本版本不做删除保护。 */
+    /**
+     * 是否内置：Y/N。只由种子数据设置，不接受 API 调用方指定——
+     * {@link io.github.describeadmin.system.service.SysConfigService#save} 会强制清空该字段，
+     * {@code removeById} 拒绝删除标记为内置的记录。
+     */
     private String configType;
 
     public String getConfigKey() { return configKey; }

@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS sys_config (
   config_key   VARCHAR(128) NOT NULL                COMMENT '参数键',
   config_value VARCHAR(500) NOT NULL                COMMENT '参数值',
   config_name  VARCHAR(64)      NULL                COMMENT '参数名称',
-  -- Y/N，是否内置，仅作展示用，本版本不做删除保护
+  -- Y/N，是否内置；只由种子数据写入，Service 层拒绝删除内置记录
   config_type  VARCHAR(1)       NULL                COMMENT '是否内置',
   create_by    BIGINT           NULL                COMMENT '创建人',
   create_time  DATETIME         NULL                COMMENT '创建时间',
