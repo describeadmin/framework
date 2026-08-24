@@ -2,7 +2,7 @@ package io.github.describeadmin.system.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.mybatis.api.BaseService;
-import io.github.describeadmin.system.core.TreeBuilder;
+import io.github.describeadmin.common.api.TreeBuilder;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.mapper.SysMenuMapper;
 import io.github.describeadmin.system.mapper.SysRelationMapper;

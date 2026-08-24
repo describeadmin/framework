@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import io.github.describeadmin.common.api.CurrentUserProvider;
 import org.apache.ibatis.reflection.MetaObject;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 /**
@@ -15,22 +16,33 @@ import java.time.LocalDateTime;
  * <p>当前用户 ID 的获取通过 {@link CurrentUserProvider} 解耦——本模块不依赖
  * framework-security-starter，否则只用 ORM 不用鉴权的场景会被迫拖进 Spring Security。
  * 未提供实现时审计人字段留空，不影响其余功能。
+ *
+ * <p>时间通过 {@link Clock} 取而不是直接 {@code LocalDateTime.now()}，是为了让依赖
+ * 审计时间的业务逻辑可测——测试里注入 {@code Clock.fixed(...)} 就能断言具体时刻，
+ * 否则「创建后 7 天过期」这类逻辑只能靠 sleep 或容差比较来验证，两者都不可靠。
  */
 public class AuditMetaObjectHandler implements MetaObjectHandler {
 
     private final CurrentUserProvider currentUserProvider;
+
+    private final Clock clock;
 
     public AuditMetaObjectHandler() {
         this(CurrentUserProvider.NOOP);
     }
 
     public AuditMetaObjectHandler(CurrentUserProvider currentUserProvider) {
+        this(currentUserProvider, Clock.systemDefaultZone());
+    }
+
+    public AuditMetaObjectHandler(CurrentUserProvider currentUserProvider, Clock clock) {
         this.currentUserProvider = currentUserProvider == null ? CurrentUserProvider.NOOP : currentUserProvider;
+        this.clock = clock == null ? Clock.systemDefaultZone() : clock;
     }
 
     @Override
     public void insertFill(MetaObject metaObject) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         Long userId = currentUserProvider.currentUserId();
 
         strictInsertFill(metaObject, "createTime", LocalDateTime.class, now);
@@ -45,7 +57,7 @@ public class AuditMetaObjectHandler implements MetaObjectHandler {
 
     @Override
     public void updateFill(MetaObject metaObject) {
-        strictUpdateFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());
+        strictUpdateFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now(clock));
         Long userId = currentUserProvider.currentUserId();
         if (userId != null) {
             strictUpdateFill(metaObject, "updateBy", Long.class, userId);

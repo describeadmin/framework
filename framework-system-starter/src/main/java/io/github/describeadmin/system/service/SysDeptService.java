@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseService;
-import io.github.describeadmin.system.core.TreeBuilder;
+import io.github.describeadmin.common.api.TreeBuilder;
 import io.github.describeadmin.system.entity.SysDept;
 import io.github.describeadmin.system.mapper.SysDeptMapper;
 import org.springframework.stereotype.Service;

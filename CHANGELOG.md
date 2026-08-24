@@ -40,6 +40,21 @@
 - 新增 `sys_dict_type`/`sys_dict_data`/`sys_config`/`sys_oper_log` 四张表（字典、
   参数配置、操作日志）。同样是对已建库环境的破坏性 schema 变更，与上一条数据权限的
   变更一起处理即可（同一次重建库覆盖两者）。
+- **所有 `Long` / `long` 现在序列化为 JSON 字符串**（`describeadmin.web.json.long-as-string`，
+  默认开启）。这是一条前端可见的破坏性变更：`id`、`createBy`、`updateBy`、`userId`、
+  菜单 `id` 等字段的 TypeScript 类型由 `number` 变为 `string`。
+  动机是 3.3 允许把主键切成雪花 ID，而 19 位的雪花 ID 超出 JS
+  `Number.MAX_SAFE_INTEGER`，前端 `JSON.parse` 会静默舍入末几位——
+  **列表显示正常，点编辑/删除却报「记录不存在」或改错行**。框架既然提供了这个开关，
+  就得保证切过去之后整条链路是对的。
+  `PageResult` 的 `total`/`current`/`size`/`pages` 用
+  `@JsonFormat(shape = NUMBER)` 排除在外，仍是数字（`el-pagination` 的 `:total` 要求数字）。
+  codegen 与三份前端 `auth.ts` 已同步；业务方自己的 TS 类型需要同步修改。
+  确认不会用雪花 ID 的项目可以关掉这个开关，但切换后的故障是静默的。
+- **时间类型的 JSON 输出格式由 ISO-8601 改为 `yyyy-MM-dd HH:mm:ss` 一族**
+  （`LocalDate` 为 `yyyy-MM-dd`，`LocalTime` 为 `HH:mm:ss`，均可配置）。
+  输入侧是**出严进宽**：`T` 与空格分隔都接受，秒与小数秒可省，
+  因此已经在按 ISO 发数据的调用方不受影响。
 
 ### New Features
 
@@ -192,6 +207,23 @@
   `DELETE /api/system/oper-log/{id}`、`DELETE /api/system/oper-log/clean`（清空，
   复用删除的权限点，不单独开一个权限对象）。
 - 新增配置项 `describeadmin.system.oper-log.enabled`（默认 `true`）。
+- `FrameworkJsonModule`（framework-web-starter）—— 框架的 JSON 序列化约定，
+  开关前缀 `describeadmin.web.json.*`。注册为 `Module` Bean 而不是自定义
+  `ObjectMapper`：后者会顶掉 Spring Boot 的全部默认配置并让业务方的
+  `spring.jackson.*` 失效。`enabled=false` 可整体退回 Boot 默认行为。
+  `BigDecimal` 刻意不转字符串（理由见 CLAUDE.md 4.8）。
+- 可注入的 `Clock` Bean（framework-mybatis-starter，`@ConditionalOnMissingBean`）。
+  `AuditMetaObjectHandler` 的审计时间改从它读取，业务方在测试里注入
+  `Clock.fixed(...)` 即可断言具体时刻，不必再靠 sleep 或容差比较验证
+  「创建后 N 天过期」这类逻辑。原有两个构造函数保留为重载，调用方无需改动。
+- `TreeBuilder` 上提到 `framework-common` 的 `api/` 包
+  （原 `io.github.describeadmin.system.core.TreeBuilder`）。建树是业务方也会用到的
+  通用能力，留在系统管理模块里拿不到。原类保留为 `@Deprecated(forRemoval = true)`
+  的转发实现，将在 0.3.0 移除。
+- framework-web-starter 建立测试底座（此前没有任何测试）：24 个用例，
+  含一组走真实 Spring MVC 链路的 MockMvc 往返测试——只断言 Module Bean 存在
+  是不够的，Bean 建了却没被 `MappingJackson2HttpMessageConverter` 装上
+  是一种启动毫无异常的静默失败。
 
 ### Bug Fixes
 
@@ -204,6 +236,21 @@
   `apiPrefix` 默认把 `my_module` 转成 `/api/my-module`（推导得 `my-module:list`），
   而 `menu-*.sql` 登记的是 `my_module:list`，表现为连 ADMIN 都被 403。
   现由生成的 `permPrefix()` 覆写消除。
+- **带 `datetime` 字段的模块，新增/编辑表单提交一直是坏的**。codegen 生成的
+  日期时间选择器发 `yyyy-MM-dd HH:mm:ss`（空格分隔），而 Spring Boot 默认按
+  ISO-8601 反序列化 `LocalDateTime`，解析必然失败。
+  查询参数那条路 codegen 自己手工绕过了（`value.replace(' ', 'T')`），
+  `@RequestBody` 这条路没有，于是"搜索能用、新增不能用"。
+  此前从未被发现，是因为 `examples/project.yaml` 只用了 `date`、
+  `sample-app` 也没有任何 `datetime` 字段——全仓没有一处触发过这条路径。
+  现由 `FrameworkJsonModule` 的宽松解析器修复。
+  注意实测该故障返回的是 **500 而不是 400**，原因见下条。
+
+> **已知缺陷（本版本未处置）**：`GlobalExceptionHandler` 没有处理
+> `HttpMessageNotReadableException`，因此任何请求体解析失败（日期格式错、
+> JSON 语法错、类型对不上）都会落到 `@ExceptionHandler(Throwable.class)`
+> 兜底返回 500。"日期填错了"是使用者的输入问题，报服务器内部错误会把排查方向带偏。
+> 详见 `docs/VERSION_BASELINE.md` 发现 ⑳。
 
 ---
 

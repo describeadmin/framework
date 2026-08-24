@@ -19,6 +19,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.annotation.Order;
 
+import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -111,8 +112,24 @@ public class FrameworkMybatisAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public AuditMetaObjectHandler auditMetaObjectHandler(
-            ObjectProvider<CurrentUserProvider> currentUserProvider) {
+            ObjectProvider<CurrentUserProvider> currentUserProvider,
+            ObjectProvider<Clock> clock) {
         return new AuditMetaObjectHandler(
-                currentUserProvider.getIfAvailable(() -> CurrentUserProvider.NOOP));
+                currentUserProvider.getIfAvailable(() -> CurrentUserProvider.NOOP),
+                clock.getIfAvailable(Clock::systemDefaultZone));
+    }
+
+    /**
+     * 框架的时钟。业务方定义自己的 {@code Clock} Bean 即可覆盖，测试里换成
+     * {@code Clock.fixed(...)} 就能让审计时间可断言。
+     *
+     * <p>放在本模块而不是上提到某个公共自动配置，是因为目前只有审计填充这一个消费方。
+     * 出现第二个消费方时再考虑上提——不为一个用途预先造一个
+     * "framework-core-autoconfigure" 模块。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public Clock frameworkClock() {
+        return Clock.systemDefaultZone();
     }
 }
