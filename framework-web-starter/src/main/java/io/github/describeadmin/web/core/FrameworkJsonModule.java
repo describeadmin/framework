@@ -10,6 +10,7 @@ import com.fasterxml.jackson.datatype.jsr310.ser.LocalTimeSerializer;
 import io.github.describeadmin.web.autoconfigure.FrameworkWebProperties;
 
 import java.io.Serial;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -30,7 +31,8 @@ import java.time.temporal.ChronoField;
  * <ol>
  *   <li>{@code Long}/{@code long} → 字符串，理由见 {@link LongToStringSerializer}</li>
  *   <li>时间类型的输出格式，统一为 {@code yyyy-MM-dd HH:mm:ss} 这一族，
- *       而不是 Jackson 默认的 ISO-8601（带 {@code T} 分隔符）</li>
+ *       而不是 Jackson 默认的 ISO-8601（带 {@code T} 分隔符）——{@link Instant} 同样纳入，
+ *       换算到服务器默认时区后复用同一套格式，理由见 {@link LocalizedInstantSerializer}</li>
  *   <li>时间类型的输入解析，<b>出严进宽</b>：同时接受空格与 {@code T} 分隔</li>
  * </ol>
  *
@@ -71,6 +73,9 @@ public class FrameworkJsonModule extends SimpleModule {
         addSerializer(LocalDateTime.class, new LocalDateTimeSerializer(dateTimeOut));
         addSerializer(LocalDate.class, new LocalDateSerializer(dateOut));
         addSerializer(LocalTime.class, new LocalTimeSerializer(timeOut));
+        // Instant 复用 dateTimeFormat：本身不带时区，按服务器默认时区换算成同款字符串，
+        // 详见 LocalizedInstantSerializer 类注释。
+        addSerializer(Instant.class, new LocalizedInstantSerializer(dateTimeOut));
 
         addDeserializer(LocalDateTime.class, new LocalDateTimeDeserializer(lenientDateTime()));
         addDeserializer(LocalDate.class, new LocalDateDeserializer(DateTimeFormatter.ISO_LOCAL_DATE));

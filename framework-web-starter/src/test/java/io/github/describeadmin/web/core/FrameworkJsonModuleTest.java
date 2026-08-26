@@ -11,9 +11,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -221,6 +223,47 @@ class FrameworkJsonModuleTest {
         }
     }
 
+    @Nested
+    @DisplayName("Instant 序列化——在线会话的登录/过期时间走这条路")
+    class InstantSerialization {
+
+        @Test
+        @DisplayName("按服务器默认时区换算成与 LocalDateTime 同款的空格分隔格式，而不是 UTC 的 ISO-8601")
+        void formatsUsingSystemDefaultZone() throws Exception {
+            Instant instant = LocalDateTime.of(2026, 8, 24, 15, 30, 5)
+                    .atZone(ZoneId.systemDefault()).toInstant();
+
+            String json = mapper.writeValueAsString(new WithInstant(instant));
+
+            // 与 TimeFormat 组的断言口径一致：比对具体字符串，不只断言是字符串类型——
+            // 否则查不出"格式对但时区偏了几个小时"这类问题（CLAUDE.md 3.6）。
+            assertThat(json).isEqualTo("{\"value\":\"2026-08-24 15:30:05\"}");
+        }
+
+        @Test
+        @DisplayName("不是 Jackson 默认的 UTC ISO-8601 形态")
+        void doesNotFallBackToDefaultUtcIso() throws Exception {
+            Instant instant = Instant.parse("2026-08-24T07:30:05Z");
+
+            String json = mapper.writeValueAsString(new WithInstant(instant));
+
+            assertThat(json).doesNotContain("Z").doesNotContain("T");
+        }
+
+        @Test
+        @DisplayName("输出格式同样受 describeadmin.web.json.date-time-format 控制")
+        void reusesDateTimeFormat() throws Exception {
+            FrameworkWebProperties.Json json = new FrameworkWebProperties().getJson();
+            json.setDateTimeFormat("yyyy/MM/dd HH:mm");
+            Instant instant = LocalDateTime.of(2026, 8, 24, 15, 30, 5)
+                    .atZone(ZoneId.systemDefault()).toInstant();
+
+            String out = newMapper(json).writeValueAsString(new WithInstant(instant));
+
+            assertThat(out).isEqualTo("{\"value\":\"2026/08/24 15:30\"}");
+        }
+    }
+
     // --- 测试用的 POJO ---------------------------------------------------
 
     static class Box {
@@ -331,6 +374,18 @@ class FrameworkJsonModuleTest {
 
         public void setTime(LocalTime time) {
             this.time = time;
+        }
+    }
+
+    static class WithInstant {
+        private final Instant value;
+
+        WithInstant(Instant value) {
+            this.value = value;
+        }
+
+        public Instant getValue() {
+            return value;
         }
     }
 }
