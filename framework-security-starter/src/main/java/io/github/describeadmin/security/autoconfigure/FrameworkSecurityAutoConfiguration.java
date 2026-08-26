@@ -8,9 +8,11 @@ import io.github.describeadmin.common.api.PermissionChecker;
 import io.github.describeadmin.security.api.AuthProvider;
 import io.github.describeadmin.security.api.AuthUserLoader;
 import io.github.describeadmin.security.api.CaptchaProvider;
+import io.github.describeadmin.security.api.PasswordPolicy;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.CaptchaGuard;
+import io.github.describeadmin.security.core.DefaultPasswordPolicy;
 import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import io.github.describeadmin.security.core.InMemoryTokenStore;
 import io.github.describeadmin.security.core.LoginAttemptGuard;
@@ -70,6 +72,20 @@ public class FrameworkSecurityAutoConfiguration {
     @ConditionalOnMissingBean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * 密码复杂度策略。覆盖自助改密、管理员重置密码、创建用户设初始密码三处入口。
+     *
+     * <p>业务方注册自己的 {@link PasswordPolicy} Bean 即可覆盖默认口径，
+     * 与 {@link #passwordEncoder()}/{@link #tokenStore} 是同一"能力始终存在、
+     * 默认实现可被替换"的模式。
+     */
+    @Bean
+    @ConditionalOnMissingBean(PasswordPolicy.class)
+    public PasswordPolicy passwordPolicy(FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.PasswordPolicyProperties policy = properties.getPasswordPolicy();
+        return new DefaultPasswordPolicy(policy.isEnabled(), policy.getMinLength(), policy.getMinCharacterClasses());
     }
 
     /**

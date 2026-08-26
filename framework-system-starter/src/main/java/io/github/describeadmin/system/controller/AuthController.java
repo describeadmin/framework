@@ -15,6 +15,7 @@ import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.CaptchaGuard;
 import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.system.entity.SysMenu;
+import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.service.SysMenuService;
 import io.github.describeadmin.system.service.SysUserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -193,6 +194,38 @@ public class AuthController {
     @PutMapping("/password")
     public Result<Void> changePassword(@RequestBody Map<String, String> body) {
         userService.changeOwnPassword(currentUser().getUserId(), body.get("oldPassword"), body.get("newPassword"));
+        return Result.ok();
+    }
+
+    /**
+     * 当前登录用户的完整资料（个人中心-基本设置回显用）。
+     *
+     * <p>与 {@link #me()} 的区别：{@link LoginUser} 是跨登录方式共享的鉴权对象，
+     * 不携带 mobile/email 这类具体业务字段；这里直接返回 {@link SysUser} 实体，
+     * {@code password} 字段已有 {@code @JsonIgnore}，不会泄露密码哈希。
+     *
+     * <p>走 {@code SysUserService#getOwnById}（忽略数据权限过滤）而不是 {@code getById}——
+     * 无角色用户的数据权限默认落在 {@code SELF} 档，过滤条件是"我创建的记录"，
+     * 而用户自己的账号几乎总是管理员创建的，用会被数据权限过滤的 {@code getById}
+     * 查自己会查到 null。"我能不能看我自己的账号"不该受这条过滤约束。
+     */
+    @GetMapping("/profile")
+    public Result<SysUser> profile() {
+        return Result.ok(userService.getOwnById(currentUser().getUserId()));
+    }
+
+    /**
+     * 自助改资料：当前登录用户修改自己的姓名/手机号/邮箱。
+     *
+     * <p>与 {@link #changePassword(Map)} 同一模式：操作对象永远是当前登录用户，
+     * 不挂 {@code @PreAuthorize}。<b>请求体只接受 nickname/mobile/email 三个字段</b>——
+     * 用户名与角色不允许在此修改，改用户名/角色需要走
+     * {@code SysUserController}（需要 {@code system:user:edit} 权限）。
+     */
+    @PutMapping("/profile")
+    public Result<Void> updateProfile(@RequestBody Map<String, String> body) {
+        userService.updateOwnProfile(currentUser().getUserId(),
+                body.get("nickname"), body.get("mobile"), body.get("email"));
         return Result.ok();
     }
 

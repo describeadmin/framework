@@ -69,6 +69,9 @@ public class FrameworkSecurityProperties {
     /** 渐进式验证码。 */
     private final Captcha captcha = new Captcha();
 
+    /** 密码复杂度策略。 */
+    private final PasswordPolicyProperties passwordPolicy = new PasswordPolicyProperties();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -119,6 +122,10 @@ public class FrameworkSecurityProperties {
 
     public Captcha getCaptcha() {
         return captcha;
+    }
+
+    public PasswordPolicyProperties getPasswordPolicy() {
+        return passwordPolicy;
     }
 
     /**
@@ -279,6 +286,53 @@ public class FrameworkSecurityProperties {
 
         public void setApplicableTypes(List<String> applicableTypes) {
             this.applicableTypes = applicableTypes == null ? new ArrayList<>() : applicableTypes;
+        }
+    }
+
+    /**
+     * 密码复杂度策略，前缀 {@code describeadmin.security.password-policy}。
+     *
+     * <p>覆盖自助改密、管理员重置密码、创建用户设初始密码三处入口，
+     * 默认口径是国内政务/等保场景常见的"8 位 + 至少 3 类字符"，
+     * 具体校验逻辑见 {@code DefaultPasswordPolicy}。
+     */
+    public static class PasswordPolicyProperties {
+
+        /** 是否启用。关闭后不做任何复杂度校验，仅保留"非空"这一底线（各设密码方法自身校验）。 */
+        private boolean enabled = true;
+
+        /** 最短长度。 */
+        private int minLength = 8;
+
+        /**
+         * 大写字母/小写字母/数字/特殊字符四类中，至少需要覆盖的类别数。
+         *
+         * <p>取值范围 1-4；默认 3，即"任意 3 类"，不强制必须是哪 3 类。
+         */
+        private int minCharacterClasses = 3;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMinLength() {
+            return minLength;
+        }
+
+        public void setMinLength(int minLength) {
+            this.minLength = minLength;
+        }
+
+        public int getMinCharacterClasses() {
+            return minCharacterClasses;
+        }
+
+        public void setMinCharacterClasses(int minCharacterClasses) {
+            this.minCharacterClasses = minCharacterClasses;
         }
     }
 }
