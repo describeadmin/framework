@@ -7,8 +7,11 @@ import io.github.describeadmin.common.api.DataScopeProvider;
 import io.github.describeadmin.common.api.PermissionChecker;
 import io.github.describeadmin.security.api.AuthProvider;
 import io.github.describeadmin.security.api.AuthUserLoader;
+import io.github.describeadmin.security.api.CaptchaProvider;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
+import io.github.describeadmin.security.core.CaptchaGuard;
+import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import io.github.describeadmin.security.core.InMemoryTokenStore;
 import io.github.describeadmin.security.core.LoginAttemptGuard;
 import io.github.describeadmin.security.core.ResultAuthenticationEntryPoint;
@@ -59,6 +62,7 @@ public class FrameworkSecurityAutoConfiguration {
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/auth/providers",
+            "/api/auth/captcha",
             "/actuator/health",
             "/error");
 
@@ -85,6 +89,49 @@ public class FrameworkSecurityAutoConfiguration {
                                                FrameworkSecurityProperties properties) {
         FrameworkSecurityProperties.Lockout lockout = properties.getLockout();
         return new LoginAttemptGuard(cacheProvider, lockout.getMaxFailures(), lockout.getDuration());
+    }
+
+    /**
+     * 验证码生成/校验能力，核心默认实现是图形字符验证码。
+     *
+     * <p>不受 {@code describeadmin.security.captcha.enabled} 影响——"能力是否存在"
+     * 与"是否强制生效"分离，与 {@link #passwordEncoder()}/{@link #tokenStore} 是同一模式。
+     * 未来的滑块验证码、Cloudflare Turnstile 等插件通过注册自己的 {@link CaptchaProvider}
+     * Bean 覆盖本默认实现即可，不需要改这里。
+     */
+    @Bean
+    @ConditionalOnMissingBean(CaptchaProvider.class)
+    public CaptchaProvider captchaProvider(CacheProvider cacheProvider, FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.Captcha captcha = properties.getCaptcha();
+        return new ImageCaptchaProvider(cacheProvider, captcha.getTtl(), captcha.getCodeLength());
+    }
+
+    /**
+     * 渐进式验证码的强制生效开关，受 {@code describeadmin.security.captcha.enabled} 控制。
+     *
+     * <p>依赖可选的 {@link LoginAttemptGuard}——关闭失败次数限制
+     * （{@code describeadmin.security.lockout.enabled=false}）时验证码同样不再拦截，
+     * 见 {@link CaptchaGuard} 类注释"已知取舍"第 2 条。
+     *
+     * <p>装配时校验 {@code triggerThreshold < lockout.maxFailures}：配置错误必须在启动期
+     * 直接拒绝，而不是运行到一半才发现验证码从未生效过。
+     */
+    @Bean
+    @ConditionalOnMissingBean(CaptchaGuard.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security.captcha", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public CaptchaGuard captchaGuard(CaptchaProvider captchaProvider, FrameworkSecurityProperties properties,
+                                     ObjectProvider<LoginAttemptGuard> attemptGuardProvider) {
+        FrameworkSecurityProperties.Captcha captcha = properties.getCaptcha();
+        LoginAttemptGuard attemptGuard = attemptGuardProvider.getIfAvailable();
+        if (attemptGuard != null && captcha.getTriggerThreshold() >= properties.getLockout().getMaxFailures()) {
+            throw new IllegalStateException(
+                    "describeadmin.security.captcha.trigger-threshold(" + captcha.getTriggerThreshold()
+                            + ") 必须小于 describeadmin.security.lockout.max-failures("
+                            + properties.getLockout().getMaxFailures() + ")");
+        }
+        return new CaptchaGuard(captchaProvider, attemptGuard, captcha.getTriggerThreshold(),
+                captcha.getApplicableTypes());
     }
 
     /**

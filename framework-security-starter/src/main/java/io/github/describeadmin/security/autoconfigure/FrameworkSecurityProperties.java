@@ -1,5 +1,6 @@
 package io.github.describeadmin.security.autoconfigure;
 
+import io.github.describeadmin.security.core.UsernamePasswordAuthProvider;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -65,6 +66,9 @@ public class FrameworkSecurityProperties {
     /** access/refresh 双令牌。 */
     private final RefreshToken refreshToken = new RefreshToken();
 
+    /** 渐进式验证码。 */
+    private final Captcha captcha = new Captcha();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -111,6 +115,10 @@ public class FrameworkSecurityProperties {
 
     public RefreshToken getRefreshToken() {
         return refreshToken;
+    }
+
+    public Captcha getCaptcha() {
+        return captcha;
     }
 
     /**
@@ -196,6 +204,81 @@ public class FrameworkSecurityProperties {
 
         public void setTtl(Duration ttl) {
             this.ttl = ttl;
+        }
+    }
+
+    /**
+     * 渐进式验证码，前缀 {@code describeadmin.security.captcha}。
+     *
+     * <p>正常登录不要求验证码；同一用户名连续登录失败达到 {@link #triggerThreshold} 后，
+     * 才要求携带验证码——复用 {@code LoginAttemptGuard} 已有的失败计数。
+     */
+    public static class Captcha {
+
+        /**
+         * 是否启用渐进式验证码策略。
+         *
+         * <p>关闭后无论失败多少次都不要求验证码，但 {@code GET /api/auth/captcha}
+         * 端点仍然可用——"能力是否存在"与"是否强制生效"是两回事，与
+         * {@code PasswordEncoder}/{@code TokenStore} 的默认 Bean 同一模式。
+         */
+        private boolean enabled = true;
+
+        /**
+         * 触发验证码要求的连续失败次数。
+         *
+         * <p>必须严格小于 {@link Lockout#getMaxFailures()}，否则验证码永远赶不上生效
+         * 就已经被锁定拦下——装配时会校验这一条，配置错误直接启动失败。
+         */
+        private int triggerThreshold = 3;
+
+        /** 验证码有效期，同时也是答案在缓存中的存活时间。 */
+        private Duration ttl = Duration.ofMinutes(2);
+
+        /** 验证码字符长度。 */
+        private int codeLength = 4;
+
+        /** 需要渐进式验证码保护的登录方式，默认仅内置的用户名密码登录。 */
+        private List<String> applicableTypes = new ArrayList<>(List.of(UsernamePasswordAuthProvider.TYPE));
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getTriggerThreshold() {
+            return triggerThreshold;
+        }
+
+        public void setTriggerThreshold(int triggerThreshold) {
+            this.triggerThreshold = triggerThreshold;
+        }
+
+        public Duration getTtl() {
+            return ttl;
+        }
+
+        public void setTtl(Duration ttl) {
+            this.ttl = ttl;
+        }
+
+        public int getCodeLength() {
+            return codeLength;
+        }
+
+        public void setCodeLength(int codeLength) {
+            this.codeLength = codeLength;
+        }
+
+        public List<String> getApplicableTypes() {
+            return applicableTypes;
+        }
+
+        public void setApplicableTypes(List<String> applicableTypes) {
+            this.applicableTypes = applicableTypes == null ? new ArrayList<>() : applicableTypes;
         }
     }
 }

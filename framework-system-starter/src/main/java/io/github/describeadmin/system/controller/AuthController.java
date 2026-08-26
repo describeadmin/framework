@@ -4,17 +4,21 @@ import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.security.api.AuthRequest;
+import io.github.describeadmin.security.api.CaptchaChallenge;
+import io.github.describeadmin.security.api.CaptchaProvider;
 import io.github.describeadmin.security.api.IssuedTokens;
 import io.github.describeadmin.security.api.LoginResult;
 import io.github.describeadmin.security.api.LoginUser;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityProperties;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
+import io.github.describeadmin.security.core.CaptchaGuard;
 import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.service.SysMenuService;
 import io.github.describeadmin.system.service.SysUserService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,17 +46,23 @@ public class AuthController {
     private final TokenStore tokenStore;
     private final FrameworkSecurityProperties securityProperties;
     private final SysUserService userService;
+    private final CaptchaProvider captchaProvider;
+    private final ObjectProvider<CaptchaGuard> captchaGuard;
 
     public AuthController(AuthProviderRegistry registry,
                           SysMenuService menuService,
                           TokenStore tokenStore,
                           FrameworkSecurityProperties securityProperties,
-                          SysUserService userService) {
+                          SysUserService userService,
+                          CaptchaProvider captchaProvider,
+                          ObjectProvider<CaptchaGuard> captchaGuard) {
         this.registry = registry;
         this.menuService = menuService;
         this.tokenStore = tokenStore;
         this.securityProperties = securityProperties;
         this.userService = userService;
+        this.captchaProvider = captchaProvider;
+        this.captchaGuard = captchaGuard;
     }
 
     /**
@@ -68,6 +78,18 @@ public class AuthController {
     }
 
     /**
+     * 获取一次新的验证码挑战。
+     *
+     * <p>免认证（见 {@code FrameworkSecurityAutoConfiguration.BUILT_IN_PERMIT_ALL}）——
+     * 登录之前显然还没有令牌。是否强制要求登录携带验证码由渐进式策略
+     * （{@code describeadmin.security.captcha.*}）决定，本端点本身始终可用。
+     */
+    @GetMapping("/captcha")
+    public Result<CaptchaChallenge> captcha() {
+        return Result.ok(captchaProvider.generate());
+    }
+
+    /**
      * 登录。
      *
      * <p>除 type 外的字段整体透传给对应 AuthProvider，
@@ -80,6 +102,10 @@ public class AuthController {
     @PostMapping("/login")
     public Result<LoginResult> login(@RequestBody Map<String, Object> body) {
         String type = String.valueOf(body.getOrDefault("type", "password"));
+        CaptchaGuard guard = captchaGuard.getIfAvailable();
+        if (guard != null) {
+            guard.verifyIfRequired(type, body);
+        }
         LoginUser user = registry.authenticate(new AuthRequest(type, body));
         IssuedTokens tokens = securityProperties.getRefreshToken().isEnabled()
                 ? tokenStore.issueWithRefresh(user)

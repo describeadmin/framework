@@ -95,6 +95,17 @@ public class LoginAttemptGuard {
         cache.evict(keyOf(username));
     }
 
+    /**
+     * 当前失败次数的只读查询，不改变任何状态。
+     *
+     * <p>供渐进式验证码等"读计数做决策"的场景使用（见 {@code CaptchaGuard}）。
+     * 与 {@link #assertNotLocked} 的区别：后者是"超过阈值就抛异常"的强制关口，
+     * 本方法只读数字，判断阈值的权力交给调用方。
+     */
+    public long failureCount(String username) {
+        return currentFailures(username);
+    }
+
     private long currentFailures(String username) {
         return cache.get(keyOf(username), Long.class).orElse(0L);
     }

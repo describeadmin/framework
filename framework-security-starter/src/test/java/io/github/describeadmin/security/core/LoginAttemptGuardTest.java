@@ -128,6 +128,21 @@ class LoginAttemptGuardTest {
     }
 
     @Test
+    @DisplayName("failureCount 只读查询，不改变状态，供渐进式验证码等场景判断阈值")
+    void failureCountIsReadOnly() {
+        LoginAttemptGuard guard = guard(5, Duration.ofMinutes(15));
+        assertThat(guard.failureCount("alice")).isZero();
+
+        guard.recordFailure("alice");
+        guard.recordFailure("alice");
+
+        assertThat(guard.failureCount("alice")).isEqualTo(2);
+        // 只读：多次调用不改变计数，也不影响后续 assertNotLocked 的判断
+        assertThat(guard.failureCount("alice")).isEqualTo(2);
+        assertThatNoException().isThrownBy(() -> guard.assertNotLocked("alice"));
+    }
+
+    @Test
     @DisplayName("非法配置在构造时就拒绝，而不是运行到一半才出问题")
     void rejectsInvalidConfiguration() {
         assertThatThrownBy(() -> guard(0, Duration.ofMinutes(15)))
