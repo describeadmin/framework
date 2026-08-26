@@ -31,13 +31,6 @@ public class LoginResult implements Serializable {
 
     private final LoginUser user;
 
-    /**
-     * 向后兼容的构造函数：不含刷新令牌（{@code refreshToken=null}、{@code refreshExpiresIn=0}）。
-     */
-    public LoginResult(String token, long expiresIn, LoginUser user) {
-        this(token, null, expiresIn, 0, user);
-    }
-
     public LoginResult(String token, String refreshToken, long expiresIn, long refreshExpiresIn, LoginUser user) {
         this.token = token;
         this.refreshToken = refreshToken;
