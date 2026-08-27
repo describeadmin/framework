@@ -16,7 +16,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -131,7 +130,7 @@ public class OperLogAspect {
         }
         entry.setHttpMethod(request.getMethod());
         entry.setRequestUrl(request.getRequestURI());
-        entry.setOperatorIp(clientIp(request));
+        entry.setOperatorIp(RequestClientInfo.clientIp(request));
     }
 
     private static HttpServletRequest currentRequest() {
@@ -139,14 +138,6 @@ public class OperLogAspect {
             return null;
         }
         return attrs.getRequest();
-    }
-
-    private static String clientIp(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwardedFor)) {
-            return forwardedFor.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
     }
 
     private void fillOperator(SysOperLog entry) {

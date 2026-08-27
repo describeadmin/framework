@@ -33,6 +33,12 @@
 - `AuthUser` / `LoginUser` 的构造函数新增 `deptId`、`dataScope`、`customDeptIds` 三个参数。
   保留了不含这三项的旧构造函数重载，业务方自定义的 `AuthUserLoader` 实现无需改动即可编译通过，
   只是新用户会退回 `DataScopeType.ALL`（不过滤）。
+- **`ActiveSession` 构造函数新增 `ip`、`device` 两个参数**（`api/` 包）。0.2.0 尚未发布，
+  不保留旧构造函数重载；业务方自定义的 `TokenStore` 实现若手工构造 `ActiveSession`，
+  需要补两个参数（不关心时传 `null`）。
+- **`GET /api/system/online` 的返回体由 `List<ActiveSession>` 变为
+  `PageResult<ActiveSession>`**。前端需按分页信封（`records` / `total`）解析；
+  本仓的 `@describeadmin/system-ui` 已同步。
 - **`BaseController.permPrefix()` 从 `protected` 放宽为 `public`**——操作日志切面需要
   跨包读取它。纯粹的加法，不影响任何调用方；但任何业务方自己覆写过
   `permPrefix()` 的 Controller，若声明为 `protected`，会因为"子类不能降低父类方法可见性"
@@ -102,10 +108,22 @@
   外部统一认证中心的实现），它们保留默认行为即可。
 - `ActiveSession`（`api/` 包）—— 会话快照，**刻意不含令牌本身**：
   令牌一旦出现在这个响应里，任何能打开在线用户页的人都可以拿它冒充当事人。
-- `GET /api/system/online`、`DELETE /api/system/online/{userId}`，
-  权限点 `system:online:list` / `system:online:remove`。
-- 种子数据新增对应菜单，**`visible = 0`**：后端已可用但前端页面尚未交付，
-  置 0 让权限点先就位而不在侧边栏生成一个点开就 404 的入口。前端落地后改成 1。
+  携带 `ip` / `device`（登录 IP 与设备描述），`TokenStore` 实现未记录来源时为 `null`。
+- `SessionMeta`（`api/` 包）—— 一次登录的来源信息（IP + 设备），由 Web 层在登录时
+  从 `HttpServletRequest` 提取。与之配套，`TokenStore` 新增 `issue(user, meta)` 与
+  `issueWithRefresh(user, meta)` 两个 **`default` 重载**（默认忽略 `meta`，语义为
+  "本实现不记录登录来源"）。刷新令牌时来源随会话延续。
+- 设备描述由 `RequestClientInfo`（`framework-system-starter` 内部，非 `api/`）对
+  `User-Agent` 做**轻量启发式**解析（`Chrome · Windows` 这种粒度），不引 UA 解析库。
+  同一个工具也统一了"哪个头算客户端 IP"的判断（`X-Forwarded-For` 首段 → `X-Real-IP`
+  → `remoteAddr`），`OperLogAspect` 一并改用它——操作日志此前不认 `X-Real-IP`。
+- `GET /api/system/online` 返回 `PageResult<ActiveSession>`，接受 `PageQuery`
+  （`current` / `size`）；`DELETE /api/system/online/{userId}` 不变。
+  权限点 `system:online:list` / `system:online:remove`。分页在应用层对 `listActive()`
+  的全量快照切片——`TokenStore` 没有分页入参，翻页会重复一次全量枚举，但这是低频管理页、
+  在线会话数天然有界，换来的是与其余列表页一致的 `PageResult` 契约。
+- 种子数据的在线用户菜单 `visible = 1`，前端「在线用户」页（列表 + 登录 IP/设备列
+  + 分页 + 强制下线）已交付。
 
 **第一个可选插件已独立成仓**
 

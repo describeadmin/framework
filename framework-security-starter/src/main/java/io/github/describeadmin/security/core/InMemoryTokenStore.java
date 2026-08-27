@@ -3,6 +3,7 @@ package io.github.describeadmin.security.core;
 import io.github.describeadmin.security.api.ActiveSession;
 import io.github.describeadmin.security.api.IssuedTokens;
 import io.github.describeadmin.security.api.LoginUser;
+import io.github.describeadmin.security.api.SessionMeta;
 import io.github.describeadmin.security.api.TokenStore;
 
 import java.security.SecureRandom;
@@ -69,12 +70,17 @@ public class InMemoryTokenStore implements TokenStore {
 
     @Override
     public String issue(LoginUser user) {
+        return issue(user, SessionMeta.EMPTY);
+    }
+
+    @Override
+    public String issue(LoginUser user, SessionMeta meta) {
         if (user == null) {
             throw new IllegalArgumentException("不能为 null 用户签发令牌");
         }
         String token = newOpaqueToken();
         Instant now = Instant.now();
-        tokens.put(token, new Entry(user, now, now.plus(ttl)));
+        tokens.put(token, new Entry(user, now, now.plus(ttl), meta == null ? SessionMeta.EMPTY : meta));
         if (issueCount.incrementAndGet() % SWEEP_INTERVAL == 0) {
             sweepExpired();
         }
@@ -133,12 +139,20 @@ public class InMemoryTokenStore implements TokenStore {
 
     @Override
     public IssuedTokens issueWithRefresh(LoginUser user) {
+        return issueWithRefresh(user, SessionMeta.EMPTY);
+    }
+
+    @Override
+    public IssuedTokens issueWithRefresh(LoginUser user, SessionMeta meta) {
         if (user == null) {
             throw new IllegalArgumentException("不能为 null 用户签发令牌");
         }
-        String accessToken = issue(user);
+        SessionMeta safeMeta = meta == null ? SessionMeta.EMPTY : meta;
+        String accessToken = issue(user, safeMeta);
         String refreshToken = newOpaqueToken();
-        refreshTokens.put(refreshToken, new RefreshEntry(user, Instant.now().plus(refreshTtl)));
+        // refresh entry 也带上来源信息：刷新出的新会话是同一次登录的延续，
+        // 设备/IP 应当跟着走，否则会话被刷新过一次后在线用户页就显示不出它从哪来
+        refreshTokens.put(refreshToken, new RefreshEntry(user, Instant.now().plus(refreshTtl), safeMeta));
         return new IssuedTokens(accessToken, refreshToken);
     }
 
@@ -153,7 +167,7 @@ public class InMemoryTokenStore implements TokenStore {
         if (entry == null || entry.expiresAt().isBefore(Instant.now())) {
             return Optional.empty();
         }
-        return Optional.of(issueWithRefresh(entry.user()));
+        return Optional.of(issueWithRefresh(entry.user(), entry.meta()));
     }
 
     @Override
@@ -174,9 +188,10 @@ public class InMemoryTokenStore implements TokenStore {
                 continue;
             }
             LoginUser user = entry.user();
+            SessionMeta meta = entry.meta() == null ? SessionMeta.EMPTY : entry.meta();
             sessions.add(new ActiveSession(user.getUserId(), user.getUsername(),
                     user.getNickname(), user.getAuthType(),
-                    entry.issuedAt(), entry.expiresAt()));
+                    entry.issuedAt(), entry.expiresAt(), meta.getIp(), meta.getDevice()));
         }
         // 最近登录的排在前面，这是管理页面唯一有意义的默认顺序
         sessions.sort(Comparator.comparing(ActiveSession::getIssuedAt).reversed());
@@ -205,9 +220,9 @@ public class InMemoryTokenStore implements TokenStore {
         refreshTokens.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(now));
     }
 
-    private record Entry(LoginUser user, Instant issuedAt, Instant expiresAt) {
+    private record Entry(LoginUser user, Instant issuedAt, Instant expiresAt, SessionMeta meta) {
     }
 
-    private record RefreshEntry(LoginUser user, Instant expiresAt) {
+    private record RefreshEntry(LoginUser user, Instant expiresAt, SessionMeta meta) {
     }
 }

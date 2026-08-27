@@ -9,7 +9,9 @@ import io.github.describeadmin.security.api.CaptchaProvider;
 import io.github.describeadmin.security.api.IssuedTokens;
 import io.github.describeadmin.security.api.LoginResult;
 import io.github.describeadmin.security.api.LoginUser;
+import io.github.describeadmin.security.api.SessionMeta;
 import io.github.describeadmin.security.api.TokenStore;
+import io.github.describeadmin.system.core.RequestClientInfo;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityProperties;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.CaptchaGuard;
@@ -101,16 +103,19 @@ public class AuthController {
      * 前端应据此不再调用 {@link #refresh(Map)}。
      */
     @PostMapping("/login")
-    public Result<LoginResult> login(@RequestBody Map<String, Object> body) {
+    public Result<LoginResult> login(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         String type = String.valueOf(body.getOrDefault("type", "password"));
         CaptchaGuard guard = captchaGuard.getIfAvailable();
         if (guard != null) {
             guard.verifyIfRequired(type, body);
         }
         LoginUser user = registry.authenticate(new AuthRequest(type, body));
+        // 登录来源写进会话，供"在线用户"页展示；TokenStore 实现可选择忽略（默认实现即忽略）
+        SessionMeta meta = new SessionMeta(
+                RequestClientInfo.clientIp(request), RequestClientInfo.device(request));
         IssuedTokens tokens = securityProperties.getRefreshToken().isEnabled()
-                ? tokenStore.issueWithRefresh(user)
-                : new IssuedTokens(tokenStore.issue(user), null);
+                ? tokenStore.issueWithRefresh(user, meta)
+                : new IssuedTokens(tokenStore.issue(user, meta), null);
         return Result.ok(new LoginResult(
                 tokens.getAccessToken(), tokens.getRefreshToken(),
                 securityProperties.getTokenTtl().toSeconds(),

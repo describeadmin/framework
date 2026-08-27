@@ -31,6 +31,24 @@ public interface TokenStore {
     String issue(LoginUser user);
 
     /**
+     * 带来源信息的签发。
+     *
+     * <p><b>为什么是 default 方法</b>：与 {@link #issueWithRefresh(LoginUser)}、
+     * {@link #listActive()} 同理——在接口发布之后新增，写成抽象方法会让所有已实现
+     * {@code TokenStore} 的业务方直接编译失败。默认实现忽略 {@code meta}、直接委托给
+     * {@link #issue(LoginUser)}，语义是"本实现不记录登录来源"，此时
+     * {@link ActiveSession#getIp()} / {@link ActiveSession#getDevice()} 为 {@code null}。
+     * 框架内置的两个实现（{@code InMemoryTokenStore} / {@code RedisTokenStore}）会把
+     * {@code meta} 存进会话。
+     *
+     * @param user 认证结果，不为 null
+     * @param meta 登录来源，不为 null（不关心时传 {@link SessionMeta#EMPTY}）
+     */
+    default String issue(LoginUser user, SessionMeta meta) {
+        return issue(user);
+    }
+
+    /**
      * 解析令牌。
      *
      * <p>令牌不存在、已过期或已被吊销时返回空 {@link Optional}，
@@ -66,6 +84,17 @@ public interface TokenStore {
      */
     default IssuedTokens issueWithRefresh(LoginUser user) {
         return new IssuedTokens(issue(user), null);
+    }
+
+    /**
+     * 带来源信息的 access/refresh 令牌对签发，语义见 {@link #issue(LoginUser, SessionMeta)}
+     * 与 {@link #issueWithRefresh(LoginUser)}。默认实现忽略 {@code meta}。
+     *
+     * @param user 认证结果，不为 null
+     * @param meta 登录来源，不为 null（不关心时传 {@link SessionMeta#EMPTY}）
+     */
+    default IssuedTokens issueWithRefresh(LoginUser user, SessionMeta meta) {
+        return issueWithRefresh(user);
     }
 
     /**

@@ -1,5 +1,7 @@
 package io.github.describeadmin.system.controller;
 
+import io.github.describeadmin.common.api.PageQuery;
+import io.github.describeadmin.common.api.PageResult;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.security.api.ActiveSession;
 import io.github.describeadmin.security.api.TokenStore;
@@ -20,6 +22,11 @@ import java.util.List;
  * 令牌存储里，再落一张表就会出现两份状态需要同步，而它们必然会不一致。
  * 因此本类不继承 {@code BaseController}，权限点用 {@code @PreAuthorize} 显式声明。
  *
+ * <p><b>分页在应用层做</b>：{@link TokenStore#listActive()} 没有分页入参（Redis 实现是
+ * 全量 {@code SCAN}，内存实现是整表快照），因此这里先拿全量、排好序，再按 {@link PageQuery}
+ * 切片。翻页会重复一次全量枚举，但这是个低频的管理页，在线会话数天然有界（不是历史流水），
+ * 这个代价可以接受；换来的是与其余列表页一致的 {@link PageResult} 契约和前端分页组件。
+ *
  * <p><b>默认实现下的可见范围</b>：框架默认的 {@code InMemoryTokenStore} 只持有<b>本实例</b>
  * 的会话。多实例部署时这个页面只能看到当前实例的在线用户，踢下线也只对当前实例生效。
  * 需要全局视图请换用集中式的 {@code TokenStore} 实现，上层代码不用动。
@@ -35,15 +42,23 @@ public class SysOnlineController {
     }
 
     /**
-     * 在线会话列表。
+     * 在线会话列表（分页）。
      *
-     * <p>会话粒度而非用户粒度：同一个用户多设备登录会出现多条。
+     * <p>会话粒度而非用户粒度：同一个用户多设备登录会出现多条。每条带上登录时的
+     * IP 与设备描述（见 {@link ActiveSession#getIp()} / {@link ActiveSession#getDevice()}）。
      * 响应里不含令牌本身，理由见 {@link ActiveSession} 的类注释。
+     *
+     * <p>排序沿用 {@link TokenStore#listActive()} 的约定：最近登录的在前。
      */
     @PreAuthorize("hasAuthority('system:online:list')")
     @GetMapping
-    public Result<List<ActiveSession>> list() {
-        return Result.ok(tokenStore.listActive());
+    public Result<PageResult<ActiveSession>> list(PageQuery query) {
+        List<ActiveSession> all = tokenStore.listActive();
+        long total = all.size();
+        int from = (int) Math.min((query.getCurrent() - 1) * query.getSize(), total);
+        int to = (int) Math.min(from + query.getSize(), total);
+        return Result.ok(new PageResult<>(
+                all.subList(from, to), total, query.getCurrent(), query.getSize()));
     }
 
     /**

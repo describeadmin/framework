@@ -1,7 +1,9 @@
 package io.github.describeadmin.security.core;
 
 import io.github.describeadmin.security.api.ActiveSession;
+import io.github.describeadmin.security.api.IssuedTokens;
 import io.github.describeadmin.security.api.LoginUser;
+import io.github.describeadmin.security.api.SessionMeta;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -88,6 +90,41 @@ class InMemoryTokenStoreTest {
         // 惰性清理意味着条目可能还在 map 里，但它已不能用于认证，
         // 列进"在线用户"会让管理员看到并不存在的会话
         assertThat(shortLived.listActive()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("登录来源 IP 与设备写进会话，出现在在线列表里")
+    void sessionMetaIsSurfaced() {
+        store.issue(user(1L, "admin", "超级管理员"),
+                new SessionMeta("203.0.113.7", "Chrome · Windows"));
+
+        ActiveSession s = store.listActive().get(0);
+        assertThat(s.getIp()).isEqualTo("203.0.113.7");
+        assertThat(s.getDevice()).isEqualTo("Chrome · Windows");
+    }
+
+    @Test
+    @DisplayName("不带来源信息签发时，IP/设备为 null 而不是报错")
+    void sessionMetaIsOptional() {
+        store.issue(user(1L, "admin", "超级管理员"));
+
+        ActiveSession s = store.listActive().get(0);
+        assertThat(s.getIp()).isNull();
+        assertThat(s.getDevice()).isNull();
+    }
+
+    @Test
+    @DisplayName("刷新令牌后，新会话仍带着原登录的 IP 与设备")
+    void refreshCarriesSessionMetaForward() {
+        IssuedTokens issued = store.issueWithRefresh(user(1L, "admin", "超级管理员"),
+                new SessionMeta("203.0.113.7", "Firefox · Linux"));
+
+        store.refresh(issued.getRefreshToken()).orElseThrow();
+
+        ActiveSession s = store.listActive().stream()
+                .filter(x -> "203.0.113.7".equals(x.getIp()))
+                .findFirst().orElseThrow();
+        assertThat(s.getDevice()).isEqualTo("Firefox · Linux");
     }
 
     @Test
