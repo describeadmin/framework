@@ -43,6 +43,15 @@ public class LoginUser implements Serializable {
      */
     private final String homePath;
 
+    /**
+     * 是否要求强制修改密码（管理员建号 / 重置密码后，或密码已过有效期）。
+     *
+     * <p>为 true 时 {@code PasswordResetRequiredFilter} 只放行 {@code PUT /api/auth/password}、
+     * {@code GET /api/auth/me}、{@code POST /api/auth/logout}，其余请求返回
+     * {@code ResultCode.PASSWORD_RESET_REQUIRED}。前端据此跳强制改密页。
+     */
+    private final boolean pwdResetRequired;
+
     public LoginUser(Long userId, String username, String nickname, String authType,
                      Set<String> roles, Set<String> permissions) {
         this(userId, username, nickname, authType, roles, permissions,
@@ -59,6 +68,14 @@ public class LoginUser implements Serializable {
     public LoginUser(Long userId, String username, String nickname, String authType,
                      Set<String> roles, Set<String> permissions,
                      Long deptId, DataScopeType dataScope, Set<Long> customDeptIds, String homePath) {
+        this(userId, username, nickname, authType, roles, permissions,
+                deptId, dataScope, customDeptIds, homePath, false);
+    }
+
+    public LoginUser(Long userId, String username, String nickname, String authType,
+                     Set<String> roles, Set<String> permissions,
+                     Long deptId, DataScopeType dataScope, Set<Long> customDeptIds, String homePath,
+                     boolean pwdResetRequired) {
         this.userId = userId;
         this.username = username;
         this.nickname = nickname;
@@ -69,6 +86,7 @@ public class LoginUser implements Serializable {
         this.dataScope = dataScope == null ? DataScopeType.ALL : dataScope;
         this.customDeptIds = immutableLong(customDeptIds);
         this.homePath = homePath;
+        this.pwdResetRequired = pwdResetRequired;
     }
 
     private static Set<String> immutable(Set<String> src) {
@@ -121,5 +139,9 @@ public class LoginUser implements Serializable {
 
     public String getHomePath() {
         return homePath;
+    }
+
+    public boolean isPwdResetRequired() {
+        return pwdResetRequired;
     }
 }

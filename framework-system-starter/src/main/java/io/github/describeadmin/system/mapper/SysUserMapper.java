@@ -55,10 +55,14 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
      * 乐观锁的自动递增，因此这里手动维护 {@code update_by}/{@code update_time}/
      * {@code version}——版本号必须照样 +1，否则后续管理员侧基于旧版本号的编辑
      * 会把这次自助改密的结果当作"没变化"而覆盖掉。
+     *
+     * <p>一并把 {@code pwd_reset_required} 清 0（自助改密是解除强制改密的唯一途径）、
+     * 刷新 {@code pwd_update_time}（重置「定期过期」的计时起点）。
      */
     @InterceptorIgnore(dataPermission = "true")
-    @Update("UPDATE sys_user SET password = #{password}, update_by = #{id}, update_time = NOW(), "
-            + "version = version + 1 WHERE id = #{id} AND deleted = 0")
+    @Update("UPDATE sys_user SET password = #{password}, pwd_reset_required = 0, pwd_update_time = NOW(), "
+            + "update_by = #{id}, update_time = NOW(), version = version + 1 "
+            + "WHERE id = #{id} AND deleted = 0")
     int updateSelfPassword(@Param("id") Long id, @Param("password") String password);
 
     /**

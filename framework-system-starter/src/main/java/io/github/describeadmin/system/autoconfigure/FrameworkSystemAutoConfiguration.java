@@ -3,11 +3,15 @@ package io.github.describeadmin.system.autoconfigure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.describeadmin.mybatis.api.DataScopeTableCustomizer;
 import io.github.describeadmin.security.api.AuthUserLoader;
+import io.github.describeadmin.security.api.PasswordPolicy;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityAutoConfiguration;
 import io.github.describeadmin.system.core.DbAuthUserLoader;
+import io.github.describeadmin.system.core.DevAdminSeeder;
 import io.github.describeadmin.system.core.OperLogAspect;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
+import io.github.describeadmin.system.service.SysConfigService;
 import io.github.describeadmin.system.service.SysOperLogService;
+import io.github.describeadmin.system.service.SysRoleService;
 import io.github.describeadmin.system.service.SysUserService;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -57,8 +61,24 @@ public class FrameworkSystemAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(AuthUserLoader.class)
     public DbAuthUserLoader dbAuthUserLoader(SysUserService userService,
-                                             SysRelationMapper relationMapper) {
-        return new DbAuthUserLoader(userService, relationMapper);
+                                             SysRelationMapper relationMapper,
+                                             SysConfigService configService) {
+        return new DbAuthUserLoader(userService, relationMapper, configService);
+    }
+
+    /**
+     * 开发种子管理员。默认不装配——只有 {@code application-local.yml} 显式打开
+     * {@code describeadmin.system.dev-seed.enabled=true} 时才创建随机口令的管理员账号，
+     * 并把明文写到项目根 {@code .passwd}。生产 profile 永远不会有这个 Bean。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "describeadmin.system.dev-seed", name = "enabled",
+            havingValue = "true")
+    public DevAdminSeeder devAdminSeeder(SysUserService userService, SysRoleService roleService,
+                                         PasswordPolicy passwordPolicy,
+                                         FrameworkSystemProperties properties) {
+        return new DevAdminSeeder(userService, roleService, passwordPolicy, properties.getDevSeed());
     }
 
     /**

@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.github.describeadmin.mybatis.api.BaseEntity;
 
+import java.time.LocalDateTime;
+
 /** 用户。 */
 @TableName("sys_user")
 public class SysUser extends BaseEntity {
@@ -35,6 +37,16 @@ public class SysUser extends BaseEntity {
     private Long deptId;
     private Integer status;
 
+    /**
+     * 下次登录必须改密：1是 0否。管理员建号 / 重置密码后置 1，用户自助改密成功后清 0。
+     * 密码「定期过期」不写这一列（登录时按 {@link #pwdUpdateTime} 算），见
+     * {@code io.github.describeadmin.system.core.DbAuthUserLoader}。
+     */
+    private Integer pwdResetRequired;
+
+    /** 密码最后修改时间，供「定期强制过期」判断。为 null（旧库升级）时按「未过期」处理。 */
+    private LocalDateTime pwdUpdateTime;
+
     /** 非持久化字段：仅用于向前端返回部门名称。 */
     @TableField(exist = false)
     private String deptName;
@@ -53,6 +65,10 @@ public class SysUser extends BaseEntity {
     public void setDeptId(Long deptId) { this.deptId = deptId; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
+    public Integer getPwdResetRequired() { return pwdResetRequired; }
+    public void setPwdResetRequired(Integer pwdResetRequired) { this.pwdResetRequired = pwdResetRequired; }
+    public LocalDateTime getPwdUpdateTime() { return pwdUpdateTime; }
+    public void setPwdUpdateTime(LocalDateTime pwdUpdateTime) { this.pwdUpdateTime = pwdUpdateTime; }
     public String getDeptName() { return deptName; }
     public void setDeptName(String deptName) { this.deptName = deptName; }
 }

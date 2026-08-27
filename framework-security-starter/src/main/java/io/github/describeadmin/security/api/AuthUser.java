@@ -47,6 +47,16 @@ public class AuthUser implements Serializable {
      */
     private final String homePath;
 
+    /**
+     * 是否要求本次登录后强制修改密码。
+     *
+     * <p>true 的两种来源：{@code sys_user.pwd_reset_required = 1}（管理员建号 / 重置密码后），
+     * 或密码已超过 {@code sys.password.max-age-days} 设定的有效期（登录时算出）。
+     * 转成 {@link LoginUser} 后由 {@code PasswordResetRequiredFilter} 拦截，
+     * 只放行改密 / me / 登出。
+     */
+    private final boolean pwdResetRequired;
+
     public AuthUser(Long userId, String username, String passwordHash, String nickname,
                     boolean enabled, Set<String> roles, Set<String> permissions) {
         this(userId, username, passwordHash, nickname, enabled, roles, permissions,
@@ -63,6 +73,14 @@ public class AuthUser implements Serializable {
     public AuthUser(Long userId, String username, String passwordHash, String nickname,
                     boolean enabled, Set<String> roles, Set<String> permissions,
                     Long deptId, DataScopeType dataScope, Set<Long> customDeptIds, String homePath) {
+        this(userId, username, passwordHash, nickname, enabled, roles, permissions,
+                deptId, dataScope, customDeptIds, homePath, false);
+    }
+
+    public AuthUser(Long userId, String username, String passwordHash, String nickname,
+                    boolean enabled, Set<String> roles, Set<String> permissions,
+                    Long deptId, DataScopeType dataScope, Set<Long> customDeptIds, String homePath,
+                    boolean pwdResetRequired) {
         this.userId = userId;
         this.username = username;
         this.passwordHash = passwordHash;
@@ -74,6 +92,7 @@ public class AuthUser implements Serializable {
         this.dataScope = dataScope == null ? DataScopeType.ALL : dataScope;
         this.customDeptIds = immutableLong(customDeptIds);
         this.homePath = homePath;
+        this.pwdResetRequired = pwdResetRequired;
     }
 
     private static Set<String> immutable(Set<String> src) {
@@ -89,7 +108,7 @@ public class AuthUser implements Serializable {
     /** 转换为对外流通的登录用户，<b>丢弃密码哈希</b>。 */
     public LoginUser toLoginUser(String authType) {
         return new LoginUser(userId, username, nickname, authType, roles, permissions,
-                deptId, dataScope, customDeptIds, homePath);
+                deptId, dataScope, customDeptIds, homePath, pwdResetRequired);
     }
 
     public Long getUserId() {
@@ -134,5 +153,9 @@ public class AuthUser implements Serializable {
 
     public String getHomePath() {
         return homePath;
+    }
+
+    public boolean isPwdResetRequired() {
+        return pwdResetRequired;
     }
 }

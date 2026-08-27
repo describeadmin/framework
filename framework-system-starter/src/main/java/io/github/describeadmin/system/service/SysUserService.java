@@ -7,30 +7,41 @@ import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.security.api.PasswordPolicy;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.system.entity.SysUser;
+import io.github.describeadmin.system.entity.SysUserPasswordHistory;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
 import io.github.describeadmin.system.mapper.SysUserMapper;
+import io.github.describeadmin.system.mapper.SysUserPasswordHistoryMapper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /** 用户管理。 */
 @Service
 public class SysUserService extends BaseService<SysUserMapper, SysUser> {
 
+    /** 参数键：密码历史不可重用数（&gt; 0 生效）。与 seed-rbac.sql 的内置参数对应。 */
+    private static final String CFG_HISTORY_COUNT = "sys.password.history-count";
+
     private final SysRelationMapper relationMapper;
     private final PasswordEncoder passwordEncoder;
     private final TokenStore tokenStore;
     private final PasswordPolicy passwordPolicy;
+    private final SysUserPasswordHistoryMapper passwordHistoryMapper;
+    private final SysConfigService configService;
 
     public SysUserService(SysRelationMapper relationMapper, PasswordEncoder passwordEncoder, TokenStore tokenStore,
-                          PasswordPolicy passwordPolicy) {
+                          PasswordPolicy passwordPolicy, SysUserPasswordHistoryMapper passwordHistoryMapper,
+                          SysConfigService configService) {
         this.relationMapper = relationMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenStore = tokenStore;
         this.passwordPolicy = passwordPolicy;
+        this.passwordHistoryMapper = passwordHistoryMapper;
+        this.configService = configService;
     }
 
     public SysUser findByUsername(String username) {
@@ -106,13 +117,18 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
             throw new BizException(ResultCode.BAD_REQUEST, "初始密码不能为空");
         }
         passwordPolicy.validate(rawPassword, user.getUsername());
+        String encoded = passwordEncoder.encode(rawPassword);
         user.setId(null);
-        user.setPassword(passwordEncoder.encode(rawPassword));
+        user.setPassword(encoded);
         if (user.getStatus() == null) {
             user.setStatus(1);
         }
+        // 管理员建号：设的是初始口令，要求本人首次登录强制改密
+        user.setPwdResetRequired(1);
+        user.setPwdUpdateTime(LocalDateTime.now());
         save(user);
         assignRoles(user.getId(), roleIds);
+        recordPasswordHistory(user.getId(), encoded);
         return user;
     }
 
@@ -133,11 +149,17 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
             throw new BizException(ResultCode.NOT_FOUND, "用户不存在: " + userId);
         }
         passwordPolicy.validate(rawPassword, exist.getUsername());
+        assertNotRecentlyUsed(userId, rawPassword);
+        String encoded = passwordEncoder.encode(rawPassword);
         SysUser update = new SysUser();
         update.setId(userId);
         update.setVersion(exist.getVersion());
-        update.setPassword(passwordEncoder.encode(rawPassword));
+        update.setPassword(encoded);
+        // 管理员重置：同样要求对方下次登录强制改密，并刷新「定期过期」计时起点
+        update.setPwdResetRequired(1);
+        update.setPwdUpdateTime(LocalDateTime.now());
         updateById(update);
+        recordPasswordHistory(userId, encoded);
         tokenStore.revokeAllOf(userId);
     }
 
@@ -172,8 +194,53 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
         if (newPassword.equals(oldPassword)) {
             throw new BizException(ResultCode.BAD_REQUEST, "新密码不能与旧密码相同");
         }
-        getBaseMapper().updateSelfPassword(userId, passwordEncoder.encode(newPassword));
+        assertNotRecentlyUsed(userId, newPassword);
+        String encoded = passwordEncoder.encode(newPassword);
+        getBaseMapper().updateSelfPassword(userId, encoded);
+        recordPasswordHistory(userId, encoded);
         tokenStore.revokeAllOf(userId);
+    }
+
+    /**
+     * 密码历史校验：{@code sys.password.history-count > 0} 时，新密码不得命中该用户最近 N 条历史。
+     * 关闭时（默认）直接放行，各设密码方法自身的"新≠当前旧"校验仍然生效。
+     */
+    private void assertNotRecentlyUsed(Long userId, String rawPassword) {
+        int historyCount = passwordHistoryCount();
+        if (userId == null || historyCount <= 0) {
+            return;
+        }
+        for (String oldHash : passwordHistoryMapper.selectRecentHashes(userId, historyCount)) {
+            if (passwordEncoder.matches(rawPassword, oldHash)) {
+                throw new BizException(ResultCode.BAD_REQUEST,
+                        "新密码不能与最近 " + historyCount + " 次使用过的密码相同");
+            }
+        }
+    }
+
+    /**
+     * 记录一条历史密码。始终写入（关闭历史校验时也写，以便日后开启即有数据可比）；
+     * 开启时顺带裁剪，只保留最近 N 条。
+     */
+    private void recordPasswordHistory(Long userId, String encodedHash) {
+        SysUserPasswordHistory history = new SysUserPasswordHistory();
+        history.setUserId(userId);
+        history.setPasswordHash(encodedHash);
+        history.setCreateTime(LocalDateTime.now());
+        passwordHistoryMapper.insert(history);
+        int historyCount = passwordHistoryCount();
+        if (historyCount > 0) {
+            passwordHistoryMapper.pruneToRecent(userId, historyCount);
+        }
+    }
+
+    private int passwordHistoryCount() {
+        String value = configService.getValue(CFG_HISTORY_COUNT, "0");
+        try {
+            return Math.max(Integer.parseInt(value.trim()), 0);
+        } catch (NumberFormatException | NullPointerException e) {
+            return 0;
+        }
     }
 
     /**

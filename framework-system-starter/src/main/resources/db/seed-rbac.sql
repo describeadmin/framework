@@ -4,35 +4,26 @@
 -- 用途：本地开发与自动化测试的确定性初始状态（develop_plan.md 5.1 的 seed-job）。
 -- 语法基线同 schema-rbac.sql：MySQL 5.7 安全子集。
 --
--- ⚠️ 生产环境禁止直接使用本文件。默认账号 admin / admin123 仅供开发与测试；
---    正式部署必须通过初始化流程强制修改初始密码。
+-- ⚠️ 生产环境禁止直接使用本文件。本文件只播种「结构数据」（角色 / 菜单 / 权限 / 根部门 /
+--    内置参数）——这些结构可以随开发库一起带到正式环境。
+--
+-- ⚠️ 默认管理员 admin 及其口令【不在本文件里】：由 framework-system-starter 的
+--    DevAdminSeeder 在 describeadmin.system.dev-seed.enabled=true 时生成一个随机强口令，
+--    BCrypt 入库，明文写到项目根 .passwd 并打印到启动日志。因此不再存在任何固定默认口令。
+--    DevAdminSeeder 依赖本文件先建好 role_code = 'ADMIN' 这一行。
 --
 -- 幂等性：全部使用 INSERT ... SELECT ... WHERE NOT EXISTS，可重复执行。
 --         不使用 INSERT IGNORE（依赖唯一索引，而本 schema 因逻辑删除未建唯一索引），
 --         也不使用 ON DUPLICATE KEY UPDATE（同理）。
 -- =============================================================================
 
--- 密码为 admin123 的 BCrypt 哈希（已实测 matches 通过）
-INSERT INTO sys_user (username, password, nickname, status, create_time, update_time, deleted, version)
-SELECT 'admin', '$2a$10$CgwiT6Di8uRu6cwzRgxxJOQLMfHUfrd640xFpmiI3OuU2Bi6/EQMe', '超级管理员', 1, NOW(), NOW(), 0, 0
-FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin' AND deleted = 0);
-
 -- data_scope = 1（全部）：不在代码里特判 role_code = 'ADMIN'，与"ADMIN 靠种子数据
 -- 授予全部菜单"是同一手法——种子数据决定 ADMIN 是超级管理员，不是代码里的特例分支。
+-- admin 用户与 ADMIN 角色的绑定由 DevAdminSeeder 负责（见文件头注释）。
 INSERT INTO sys_role (role_code, role_name, sort, data_scope, create_time, update_time, deleted, version)
 SELECT 'ADMIN', '超级管理员', 1, 1, NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_role WHERE role_code = 'ADMIN' AND deleted = 0);
-
-INSERT INTO sys_user_role (user_id, role_id)
-SELECT u.id, r.id
-FROM sys_user u, sys_role r
-WHERE u.username = 'admin' AND u.deleted = 0
-  AND r.role_code = 'ADMIN' AND r.deleted = 0
-  AND NOT EXISTS (
-    SELECT 1 FROM sys_user_role ur WHERE ur.user_id = u.id AND ur.role_id = r.id
-  );
 
 -- -----------------------------------------------------------------------------
 -- 工作台
@@ -361,3 +352,21 @@ INSERT INTO sys_dept (parent_id, dept_name, leader, sort, status, ancestors,
 SELECT 0, '总部', '管理员', 1, 1, '', NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_dept WHERE dept_name = '总部' AND parent_id = 0 AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 密码策略参数（内置，config_type = 'Y'，Service 层拒删）。均为「> 0 生效」语义，默认 0＝关。
+--   sys.password.max-age-days  ：密码有效期天数。登录时 now - pwd_update_time 超过该值 → 强制改密。
+--   sys.password.history-count ：新密码不得命中最近 N 条历史密码。
+-- 读取走 SysConfigService.getValue(key, "0")（带缓存，改参数即失效）。
+-- -----------------------------------------------------------------------------
+INSERT INTO sys_config (config_key, config_value, config_name, config_type,
+                        create_time, update_time, deleted, version)
+SELECT 'sys.password.max-age-days', '0', '密码有效期天数（0=不限）', 'Y', NOW(), NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_config WHERE config_key = 'sys.password.max-age-days' AND deleted = 0);
+
+INSERT INTO sys_config (config_key, config_value, config_name, config_type,
+                        create_time, update_time, deleted, version)
+SELECT 'sys.password.history-count', '0', '密码历史不可重用数（0=不校验）', 'Y', NOW(), NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_config WHERE config_key = 'sys.password.history-count' AND deleted = 0);

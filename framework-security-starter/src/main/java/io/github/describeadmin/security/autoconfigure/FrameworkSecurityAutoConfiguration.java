@@ -16,6 +16,7 @@ import io.github.describeadmin.security.core.DefaultPasswordPolicy;
 import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import io.github.describeadmin.security.core.InMemoryTokenStore;
 import io.github.describeadmin.security.core.LoginAttemptGuard;
+import io.github.describeadmin.security.core.PasswordResetRequiredFilter;
 import io.github.describeadmin.security.core.ResultAuthenticationEntryPoint;
 import io.github.describeadmin.security.core.SecurityContextCurrentUserProvider;
 import io.github.describeadmin.security.core.SecurityContextDataScopeProvider;
@@ -274,6 +275,17 @@ public class FrameworkSecurityAutoConfiguration {
         }
 
         /**
+         * 强制改密门禁。只对 {@code LoginUser.pwdResetRequired} 为 true 的会话生效，
+         * 未标记用户零影响，因此不需要单独的开关——随 {@code describeadmin.security.enabled} 装配。
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public PasswordResetRequiredFilter passwordResetRequiredFilter(
+                ObjectProvider<ObjectMapper> objectMapper) {
+            return new PasswordResetRequiredFilter(objectMapper.getIfAvailable(ObjectMapper::new));
+        }
+
+        /**
          * 授权异常的 advice 映射。
          *
          * <p>无条件注册（不随 permission-enabled 开关走）：即使框架的权限点校验被关掉，
@@ -293,6 +305,7 @@ public class FrameworkSecurityAutoConfiguration {
                 HttpSecurity http,
                 FrameworkSecurityProperties properties,
                 TokenAuthenticationFilter tokenFilter,
+                PasswordResetRequiredFilter pwdResetFilter,
                 ResultAuthenticationEntryPoint entryPoint) throws Exception {
 
             List<String> permitAll = new ArrayList<>(BUILT_IN_PERMIT_ALL);
@@ -313,7 +326,9 @@ public class FrameworkSecurityAutoConfiguration {
                     .exceptionHandling(ex -> ex
                             .authenticationEntryPoint(entryPoint)
                             .accessDeniedHandler(entryPoint))
-                    .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class);
+                    .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class)
+                    // 排在 tokenFilter 之后：依赖它已经把 LoginUser 填进 SecurityContext
+                    .addFilterAfter(pwdResetFilter, TokenAuthenticationFilter.class);
 
             if (!properties.getAllowedOrigins().isEmpty()) {
                 http.cors(Customizer.withDefaults());

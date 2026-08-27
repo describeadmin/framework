@@ -140,6 +140,10 @@ jobs:
             || { echo "::error::pom.xml 缺少 mysql.version 覆盖，连 MySQL 5.7 会直接失败"; fail=1; }
           grep -q 'encoding: UTF-8' src/main/resources/application-local.yml \
             || { echo "::error::application-local.yml 缺少 spring.sql.init.encoding"; fail=1; }
+          grep -q 'dev-seed' src/main/resources/application-local.yml \
+            || { echo "::error::application-local.yml 缺少 describeadmin.system.dev-seed（否则本地起来没有管理员）"; fail=1; }
+          grep -q '^\.passwd' .gitignore \
+            || { echo "::error::.gitignore 缺少 .passwd（dev-seed 的明文口令会被提交）"; fail=1; }
 
           exit $fail
 
@@ -156,9 +160,12 @@ jobs:
       - name: 登录并按【字节】核验中文
         run: |
           set -e
+          # 种子不再写死口令：dev-seed 首次启动把随机强口令的明文写到工作目录的 .passwd
+          test -f /tmp/gen/ci-app/.passwd || { echo "::error::dev-seed 没有生成 .passwd"; exit 1; }
+          PWD_VALUE=$(cat /tmp/gen/ci-app/.passwd)
           curl -s -X POST http://localhost:8090/api/auth/login \
             -H 'Content-Type: application/json' \
-            -d '{"username":"admin","password":"admin123"}' > /tmp/login.json
+            -d "{\"username\":\"admin\",\"password\":\"${PWD_VALUE}\"}" > /tmp/login.json
           python3 - <<'EOF'
           import json, sys
           d = json.load(open('/tmp/login.json', encoding='utf-8'))

@@ -27,17 +27,21 @@ MySQL 5.7 首次启动要 20~30 秒才真正就绪，判断就绪要用**带认�
 docker exec da-mysql mysql -uroot -proot -e 'SELECT 1' && echo 就绪
 ```
 
-验证登录，令牌在 `data.token`：
+首次启动时 `dev-seed` 会创建管理员 `admin`，**口令随机生成**——看启动日志里
+`dev-seed 生成初始管理员` 那几行，或读项目根目录的 `.passwd` 文件（已在 `.gitignore` 中）。
+
+验证登录（把 `<.passwd 里的口令>` 换成实际值），令牌在 `data.token`：
 
 ```bash
 curl -s -X POST http://localhost:8090/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin123"}'
+  -d "{\"username\":\"admin\",\"password\":\"$(cat .passwd)\"}"
 ```
 
-> ⚠️ 默认账号 `admin` / `admin123` 且每次启动重放种子脚本，`local` profile
+> ⚠️ `local` profile 每次启动重放种子脚本、并用 `dev-seed` 建随机口令的管理员，
 > **只能用于本地开发**。真实环境另建 `application-dev.yml` / `application-prod.yml`，
-> 并把 `spring.sql.init.mode` 设为 `never`。
+> 把 `spring.sql.init.mode` 设为 `never`，并且**不要**打开 `describeadmin.system.dev-seed`。
+> 管理员为其他用户建号 / 重置密码后，对方首次登录会被要求先改密。
 
 ## 对 JDK 的要求
 

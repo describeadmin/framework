@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS sys_user (
   email        VARCHAR(128)     NULL                COMMENT '邮箱，可空，非空时应用层保证唯一',
   dept_id      BIGINT           NULL                COMMENT '所属部门ID',
   status       TINYINT      NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
+  -- 下次登录必须改密：管理员建号 / 重置密码后置 1，用户自助改密成功后清 0。
+  -- 密码「定期过期」不写这一列，而是登录时按 pwd_update_time + sys.password.max-age-days 算出来。
+  pwd_reset_required TINYINT  NOT NULL DEFAULT 0    COMMENT '下次登录必须改密：1是 0否',
+  -- 密码最后修改时间，供「定期强制过期」判断。旧库升级后为 NULL，按「未过期」处理。
+  pwd_update_time    DATETIME     NULL              COMMENT '密码最后修改时间',
   create_by    BIGINT           NULL                COMMENT '创建人',
   create_time  DATETIME         NULL                COMMENT '创建时间',
   update_by    BIGINT           NULL                COMMENT '更新人',
@@ -42,6 +47,20 @@ CREATE TABLE IF NOT EXISTS sys_user (
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_general_ci
   COMMENT='用户';
+
+-- 历史密码。只追加、由 SysUserService 在每次设密码时写入，不继承 BaseEntity 的审计/逻辑删除/乐观锁
+-- （同 sys_oper_log）。仅当 sys.password.history-count > 0 时参与校验：新密码不得命中最近 N 条。
+CREATE TABLE IF NOT EXISTS sys_user_password_history (
+  id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  user_id       BIGINT       NOT NULL                COMMENT '用户ID',
+  password_hash VARCHAR(100) NOT NULL                COMMENT '历史密码（BCrypt 哈希）',
+  create_time   DATETIME         NULL                COMMENT '产生时间',
+  PRIMARY KEY (id),
+  KEY idx_sys_user_pwd_hist_user (user_id)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='用户历史密码';
 
 CREATE TABLE IF NOT EXISTS sys_role (
   id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',

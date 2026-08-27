@@ -6,8 +6,11 @@ import io.github.describeadmin.security.api.AuthUserLoader;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.RoleScope;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
+import io.github.describeadmin.system.service.SysConfigService;
 import io.github.describeadmin.system.service.SysUserService;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -27,12 +30,18 @@ import java.util.Set;
  */
 public class DbAuthUserLoader implements AuthUserLoader {
 
+    /** 参数键：密码有效期天数（&gt; 0 生效）。与 seed-rbac.sql 的内置参数对应。 */
+    private static final String CFG_MAX_AGE_DAYS = "sys.password.max-age-days";
+
     private final SysUserService userService;
     private final SysRelationMapper relationMapper;
+    private final SysConfigService configService;
 
-    public DbAuthUserLoader(SysUserService userService, SysRelationMapper relationMapper) {
+    public DbAuthUserLoader(SysUserService userService, SysRelationMapper relationMapper,
+                            SysConfigService configService) {
         this.userService = userService;
         this.relationMapper = relationMapper;
+        this.configService = configService;
     }
 
     @Override
@@ -56,6 +65,10 @@ public class DbAuthUserLoader implements AuthUserLoader {
                 : Set.of();
         String homePath = HomePathResolver.resolve(roleScopes);
 
+        boolean pwdResetRequired =
+                (user.getPwdResetRequired() != null && user.getPwdResetRequired() == 1)
+                        || passwordExpired(user);
+
         return Optional.of(new AuthUser(
                 user.getId(),
                 user.getUsername(),
@@ -67,7 +80,32 @@ public class DbAuthUserLoader implements AuthUserLoader {
                 user.getDeptId(),
                 dataScope,
                 customDeptIds,
-                homePath));
+                homePath,
+                pwdResetRequired));
+    }
+
+    /**
+     * 密码是否已过有效期。{@code sys.password.max-age-days > 0} 且
+     * {@code now - pwd_update_time >= 天数} 时为 true。
+     *
+     * <p>不落库——每次登录都按当前参数与 {@code pwd_update_time} 现算，
+     * 因此改参数、改密码都能即时反映。{@code pwd_update_time} 为 null（旧库升级）时按未过期处理。
+     */
+    private boolean passwordExpired(SysUser user) {
+        long maxAgeDays = parseNonNegativeLong(configService.getValue(CFG_MAX_AGE_DAYS, "0"));
+        LocalDateTime pwdUpdateTime = user.getPwdUpdateTime();
+        if (maxAgeDays <= 0 || pwdUpdateTime == null) {
+            return false;
+        }
+        return Duration.between(pwdUpdateTime, LocalDateTime.now()).toDays() >= maxAgeDays;
+    }
+
+    private static long parseNonNegativeLong(String value) {
+        try {
+            return Math.max(Long.parseLong(value.trim()), 0L);
+        } catch (NumberFormatException | NullPointerException e) {
+            return 0L;
+        }
     }
 
     /** 合并结果为 CUSTOM 时，并集全部同样标了 CUSTOM 档的角色各自配置的部门。 */
