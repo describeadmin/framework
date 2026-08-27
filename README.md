@@ -176,13 +176,13 @@ ext 模块内。
 ## 自己构建
 
 ```bash
-mvn clean install                     # 需要 JDK 21（通过 toolchains 指定）
+mvn clean install                     # 任意 JDK ≥ 17 即可，不需要 toolchains
 mvn clean verify -Prelease -Dgpg.skip=true   # 验证发布产物齐备
 ```
 
-⚠️ **不要用 `java -version` 判断构建 JDK**——本项目通过 Maven Toolchains
-选择 JDK，`PATH` 上是什么与构建用什么无关。首次配置见
-[toolchains.xml.sample](https://github.com/describeadmin/docs/blob/main/scripts/toolchains.xml.sample)。
+构建 JDK 只要求 **≥ 17**（`maven-enforcer-plugin` 的 `requireJavaVersion` 会拦下更低的），
+用 17 / 21 / 25 都行——`maven.compiler.release=17` 已锁定产物字节码版本。
+本仓不再使用 `maven-toolchains-plugin`，理由见 `develop_plan.md` 2.2.2「第八轮修订」。
 
 ## 变更记录
 

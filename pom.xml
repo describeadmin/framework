@@ -80,11 +80,14 @@
 
     <!--
       Java 版本策略（develop_plan.md 2.2.2）：
-        构建用 JDK 21（由 toolchains 指定，与 PATH 无关）
+        构建 JDK 只要求 17 或更高，用哪个由构建者自己定（enforcer 的 requireJavaVersion 兜底）
         编译目标 release=17，使业务方 Java 17+ 即可使用
       不要把 release 改成 21 —— 那会把仍在 17 上的使用方挡在门外。
+
+      不再用 maven-toolchains-plugin 钉死构建 JDK：release=17 本身已保证产物在 Java 17 上可运行，
+      再钉一个具体版本只会让没配 ~/.m2/toolchains.xml 的协作者/AI 以
+      "Cannot find matching toolchain" 直接构建失败，比它要防的坑更劝退（VERSION_BASELINE 第八轮）。
     -->
-    <java.build.version>21</java.build.version>
     <maven.compiler.release>17</maven.compiler.release>
 
     <!-- 上游版本，事实来源见 VERSION_BASELINE.md -->
@@ -106,7 +109,6 @@
     <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
     <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
     <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
-    <maven-toolchains-plugin.version>3.3.0</maven-toolchains-plugin.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
     <central-publishing-plugin.version>0.11.0</central-publishing-plugin.version>
   </properties>
@@ -244,27 +246,6 @@
     </pluginManagement>
 
     <plugins>
-      <!--
-        Toolchains：显式声明构建所需的 JDK，Maven 自行从 ~/.m2/toolchains.xml 中查找。
-        这样构建结果与 PATH 上是哪个 java 无关（develop_plan.md 2.2.2）。
-        首次配置见 scripts/toolchains.xml.sample。
-      -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-toolchains-plugin</artifactId>
-        <version>${maven-toolchains-plugin.version}</version>
-        <executions>
-          <execution>
-            <goals>
-              <goal>select-jdk-toolchain</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <version>${java.build.version}</version>
-        </configuration>
-      </plugin>
-
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -315,6 +296,14 @@
                 <requireMavenVersion>
                   <version>[3.9.0,)</version>
                 </requireMavenVersion>
+                <!--
+                  构建 JDK 只要求 17+。release=17 已保证产物在 Java 17 上可运行，
+                  构建者用 17 / 21 / 更高都行；不再用 maven-toolchains-plugin 钉死具体版本
+                  （develop_plan.md 2.2.2，VERSION_BASELINE 第八轮）。
+                -->
+                <requireJavaVersion>
+                  <version>[17,)</version>
+                </requireJavaVersion>
                 <!--
                   框架的任何模块都不得引入 JDBC 驱动（develop_plan.md 2.3.2 / CLAUDE.md 3.4）。
                   驱动由业务方声明；此处从构建期堵死，防止有人"顺手"加进来。
