@@ -242,6 +242,11 @@
   含一组走真实 Spring MVC 链路的 MockMvc 往返测试——只断言 Module Bean 存在
   是不够的，Bean 建了却没被 `MappingJackson2HttpMessageConverter` 装上
   是一种启动毫无异常的静默失败。
+- **内嵌 Servlet 容器由 Tomcat 换成 Undertow**。`framework-web-starter` 排掉
+  `spring-boot-starter-tomcat`、改引 `spring-boot-starter-undertow`，业务方引框架
+  即得到 Undertow，无需在自己的工程里做任何依赖调整。仅有的使用者可见影响是
+  容器配置项的前缀：`server.tomcat.*` 不再生效，需改用 `server.undertow.*`
+  （`server.port` / `server.servlet.*` 等通用项不变）。0.2.0 尚未发布，是切换成本最低的时间点。
 
 ### Bug Fixes
 
