@@ -11,7 +11,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 
 ```xml
 <properties>
-  <describeadmin.version>0.1.1</describeadmin.version>
+  <describeadmin.version>0.2.0</describeadmin.version>
   <!-- ⚠️ 必须显式声明，见下文「驱动版本」 -->
   <mysql.version>8.2.0</mysql.version>
 </properties>
@@ -35,7 +35,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 > mvn archetype:generate -B \
 >   -DarchetypeGroupId=io.github.describeadmin \
 >   -DarchetypeArtifactId=describeadmin-archetype \
->   -DarchetypeVersion=0.1.1 \
+>   -DarchetypeVersion=0.2.0 \
 >   -DgroupId=com.acme -DartifactId=my-server -Dpackage=com.acme.myserver
 > ```
 >
@@ -57,8 +57,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 
 ## 已完成的后端能力
 
-> Maven Central 当前可发布版本是 **0.1.1**；下表含已在本仓库开发分支完成、
-> 尚待合并与发布的 **0.2.0** 能力（合并与发布进度见
+> 当前版本 **0.2.0**（发布进度见
 > [`docs/PROGRESS.md`](https://github.com/describeadmin/docs/blob/main/PROGRESS.md)）。
 > 逐条变更见 [CHANGELOG.md](./CHANGELOG.md)。
 
