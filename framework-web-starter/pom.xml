@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.describeadmin</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>0.1.1</version>
+    <version>0.2.0</version>
   </parent>
 
   <artifactId>framework-web-starter</artifactId>
@@ -20,9 +20,30 @@
       <groupId>io.github.describeadmin</groupId>
       <artifactId>framework-common</artifactId>
     </dependency>
+    <!--
+      Servlet Web 能力。刻意排掉自带的内嵌 Tomcat，改用 Undertow：
+        - describeadmin 是"框架替业务方定 Web 栈"的模块（见本仓 security-starter 的相反取舍——
+          那个 starter 不引 web，此处 web-starter 已经替业务方决定了要 Servlet Web），
+          既然要定，就定成 Undertow
+        - Undertow 内存占用低、无外部 servlet 容器进程，与本项目"薄"的取向一致
+      版本由 spring-boot-dependencies（3.5.16）仲裁，不写死。
+      注意：spring-boot-starter-validation 会传递 org.apache.tomcat.embed:tomcat-embed-el，
+      那只是 Jakarta EL 的实现库（Hibernate Validator 需要），不是 servlet 容器，保留即可。
+      业务方若确需换回 Tomcat / Jetty，在自己的 pom 里排掉 undertow starter 再引对应 starter。
+    -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-tomcat</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-undertow</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

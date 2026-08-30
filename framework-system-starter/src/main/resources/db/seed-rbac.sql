@@ -4,33 +4,26 @@
 -- 用途：本地开发与自动化测试的确定性初始状态（develop_plan.md 5.1 的 seed-job）。
 -- 语法基线同 schema-rbac.sql：MySQL 5.7 安全子集。
 --
--- ⚠️ 生产环境禁止直接使用本文件。默认账号 admin / admin123 仅供开发与测试；
---    正式部署必须通过初始化流程强制修改初始密码。
+-- ⚠️ 生产环境禁止直接使用本文件。本文件只播种「结构数据」（角色 / 菜单 / 权限 / 根部门 /
+--    内置参数）——这些结构可以随开发库一起带到正式环境。
+--
+-- ⚠️ 默认管理员 admin 及其口令【不在本文件里】：由 framework-system-starter 的
+--    DevAdminSeeder 在 describeadmin.system.dev-seed.enabled=true 时生成一个随机强口令，
+--    BCrypt 入库，明文写到项目根 .passwd 并打印到启动日志。因此不再存在任何固定默认口令。
+--    DevAdminSeeder 依赖本文件先建好 role_code = 'ADMIN' 这一行。
 --
 -- 幂等性：全部使用 INSERT ... SELECT ... WHERE NOT EXISTS，可重复执行。
 --         不使用 INSERT IGNORE（依赖唯一索引，而本 schema 因逻辑删除未建唯一索引），
 --         也不使用 ON DUPLICATE KEY UPDATE（同理）。
 -- =============================================================================
 
--- 密码为 admin123 的 BCrypt 哈希（已实测 matches 通过）
-INSERT INTO sys_user (username, password, nickname, status, create_time, update_time, deleted, version)
-SELECT 'admin', '$2a$10$CgwiT6Di8uRu6cwzRgxxJOQLMfHUfrd640xFpmiI3OuU2Bi6/EQMe', '超级管理员', 1, NOW(), NOW(), 0, 0
-FROM DUAL
-WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin' AND deleted = 0);
-
-INSERT INTO sys_role (role_code, role_name, sort, create_time, update_time, deleted, version)
-SELECT 'ADMIN', '超级管理员', 1, NOW(), NOW(), 0, 0
+-- data_scope = 1（全部）：不在代码里特判 role_code = 'ADMIN'，与"ADMIN 靠种子数据
+-- 授予全部菜单"是同一手法——种子数据决定 ADMIN 是超级管理员，不是代码里的特例分支。
+-- admin 用户与 ADMIN 角色的绑定由 DevAdminSeeder 负责（见文件头注释）。
+INSERT INTO sys_role (role_code, role_name, sort, data_scope, create_time, update_time, deleted, version)
+SELECT 'ADMIN', '超级管理员', 1, 1, NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_role WHERE role_code = 'ADMIN' AND deleted = 0);
-
-INSERT INTO sys_user_role (user_id, role_id)
-SELECT u.id, r.id
-FROM sys_user u, sys_role r
-WHERE u.username = 'admin' AND u.deleted = 0
-  AND r.role_code = 'ADMIN' AND r.deleted = 0
-  AND NOT EXISTS (
-    SELECT 1 FROM sys_user_role ur WHERE ur.user_id = u.id AND ur.role_id = r.id
-  );
 
 -- -----------------------------------------------------------------------------
 -- 工作台
@@ -171,6 +164,13 @@ WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
 
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
                       create_time, update_time, deleted, version)
+SELECT m.id, '分配数据权限', 'BUTTON', 'system:role:assign-dept', NULL, NULL, NULL, 5, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:role:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:role:assign-dept' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
 SELECT m.id, '新增', 'BUTTON', 'system:menu:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
 FROM sys_menu m
 WHERE m.perm_code = 'system:menu:list' AND m.deleted = 0
@@ -211,6 +211,131 @@ FROM sys_menu m
 WHERE m.perm_code = 'system:dept:list' AND m.deleted = 0
   AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dept:remove' AND deleted = 0);
 
+-- 在线用户。前端 @describeadmin/system-ui 的 system/online/index 页面已交付。
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '在线用户', 'MENU', 'system:online:list', '/system/online', 'system/online/index', 'lucide:monitor-dot', 5, 1,
+       NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:online:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '强制下线', 'BUTTON', 'system:online:remove', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:online:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:online:remove' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 字典管理。字典类型与字典数据共用 system:dict 前缀（同一个管理页面的两个面板），
+-- 见 SysDictTypeController/SysDictDataController 都覆写的 permPrefix()。
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '字典管理', 'MENU', 'system:dict:list', '/system/dict', 'system/dict/index', 'lucide:book-open', 6, 1,
+       NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:dict:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dict:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:dict:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dict:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:dict:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:dict:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:dict:remove' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 参数配置
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '参数配置', 'MENU', 'system:config:list', '/system/config', 'system/config/index', 'lucide:sliders-horizontal',
+       7, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '新增', 'BUTTON', 'system:config:add', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:config:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:add' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '编辑', 'BUTTON', 'system:config:edit', NULL, NULL, NULL, 2, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:config:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:edit' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:config:remove', NULL, NULL, NULL, 3, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:config:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:config:remove' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 操作日志。只有"删除"一个按钮权限点——清空复用它，不单独开一个权限对象
+-- （见 SysOperLogController 的类注释）。
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '操作日志', 'MENU', 'system:oper-log:list', '/system/oper-log', 'system/oper-log/index',
+       'lucide:scroll-text', 8, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:oper-log:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '删除', 'BUTTON', 'system:oper-log:remove', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:oper-log:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:oper-log:remove' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 登录锁定可观测性（docs/LOGIN_MODULE_AUDIT.md D 项）。暂无前端管理页面，
+-- 先注册权限点避免 403；页面落地后把下面 MENU 那一行的 visible 改成 1
+-- （先例是 system:online 当年同样经历过的过渡状态，见上方注释）。
+-- -----------------------------------------------------------------------------
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '登录锁定', 'MENU', 'system:security:list', '/system/security', 'system/security/index',
+       'lucide:lock', 9, 0, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:security:list' AND deleted = 0);
+
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
+                      create_time, update_time, deleted, version)
+SELECT m.id, '解锁', 'BUTTON', 'system:security:unlock', NULL, NULL, NULL, 1, 1, NOW(), NOW(), 0, 0
+FROM sys_menu m
+WHERE m.perm_code = 'system:security:list' AND m.deleted = 0
+  AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:security:unlock' AND deleted = 0);
+
 -- ADMIN 角色授予全部菜单
 INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT r.id, m.id
@@ -220,8 +345,28 @@ WHERE r.role_code = 'ADMIN' AND r.deleted = 0 AND m.deleted = 0
     SELECT 1 FROM sys_role_menu rm WHERE rm.role_id = r.id AND rm.menu_id = m.id
   );
 
--- 根部门
-INSERT INTO sys_dept (parent_id, dept_name, leader, sort, status, create_time, update_time, deleted, version)
-SELECT 0, '总部', '管理员', 1, 1, NOW(), NOW(), 0, 0
+-- 根部门。ancestors 显式写空串——顶级部门没有祖先，不依赖列默认值，
+-- 与本文件其余 INSERT 逐列列全的风格一致。
+INSERT INTO sys_dept (parent_id, dept_name, leader, sort, status, ancestors,
+                      create_time, update_time, deleted, version)
+SELECT 0, '总部', '管理员', 1, 1, '', NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_dept WHERE dept_name = '总部' AND parent_id = 0 AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 密码策略参数（内置，config_type = 'Y'，Service 层拒删）。均为「> 0 生效」语义，默认 0＝关。
+--   sys.password.max-age-days  ：密码有效期天数。登录时 now - pwd_update_time 超过该值 → 强制改密。
+--   sys.password.history-count ：新密码不得命中最近 N 条历史密码。
+-- 读取走 SysConfigService.getValue(key, "0")（带缓存，改参数即失效）。
+-- -----------------------------------------------------------------------------
+INSERT INTO sys_config (config_key, config_value, config_name, config_type,
+                        create_time, update_time, deleted, version)
+SELECT 'sys.password.max-age-days', '0', '密码有效期天数（0=不限）', 'Y', NOW(), NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_config WHERE config_key = 'sys.password.max-age-days' AND deleted = 0);
+
+INSERT INTO sys_config (config_key, config_value, config_name, config_type,
+                        create_time, update_time, deleted, version)
+SELECT 'sys.password.history-count', '0', '密码历史不可重用数（0=不校验）', 'Y', NOW(), NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_config WHERE config_key = 'sys.password.history-count' AND deleted = 0);

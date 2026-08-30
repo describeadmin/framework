@@ -1,14 +1,27 @@
 package io.github.describeadmin.security.autoconfigure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.describeadmin.cache.api.CacheProvider;
 import io.github.describeadmin.common.api.CurrentUserProvider;
+import io.github.describeadmin.common.api.DataScopeProvider;
+import io.github.describeadmin.common.api.PermissionChecker;
 import io.github.describeadmin.security.api.AuthProvider;
 import io.github.describeadmin.security.api.AuthUserLoader;
+import io.github.describeadmin.security.api.CaptchaProvider;
+import io.github.describeadmin.security.api.PasswordPolicy;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
+import io.github.describeadmin.security.core.CaptchaGuard;
+import io.github.describeadmin.security.core.DefaultPasswordPolicy;
+import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import io.github.describeadmin.security.core.InMemoryTokenStore;
+import io.github.describeadmin.security.core.LoginAttemptGuard;
+import io.github.describeadmin.security.core.PasswordResetRequiredFilter;
 import io.github.describeadmin.security.core.ResultAuthenticationEntryPoint;
 import io.github.describeadmin.security.core.SecurityContextCurrentUserProvider;
+import io.github.describeadmin.security.core.SecurityContextDataScopeProvider;
+import io.github.describeadmin.security.core.SecurityContextPermissionChecker;
+import io.github.describeadmin.security.core.SecurityExceptionHandler;
 import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.security.core.UsernamePasswordAuthProvider;
 import org.springframework.beans.factory.ObjectProvider;
@@ -21,6 +34,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -49,7 +63,9 @@ public class FrameworkSecurityAutoConfiguration {
      */
     private static final List<String> BUILT_IN_PERMIT_ALL = List.of(
             "/api/auth/login",
+            "/api/auth/refresh",
             "/api/auth/providers",
+            "/api/auth/captcha",
             "/actuator/health",
             "/error");
 
@@ -60,18 +76,99 @@ public class FrameworkSecurityAutoConfiguration {
     }
 
     /**
+     * 密码复杂度策略。覆盖自助改密、管理员重置密码、创建用户设初始密码三处入口。
+     *
+     * <p>业务方注册自己的 {@link PasswordPolicy} Bean 即可覆盖默认口径，
+     * 与 {@link #passwordEncoder()}/{@link #tokenStore} 是同一"能力始终存在、
+     * 默认实现可被替换"的模式。
+     */
+    @Bean
+    @ConditionalOnMissingBean(PasswordPolicy.class)
+    public PasswordPolicy passwordPolicy(FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.PasswordPolicyProperties policy = properties.getPasswordPolicy();
+        return new DefaultPasswordPolicy(policy.isEnabled(), policy.getMinLength(), policy.getMinCharacterClasses());
+    }
+
+    /**
+     * 登录失败次数限制。
+     *
+     * <p>{@code describeadmin.security.lockout.enabled=false} 时不注册，
+     * {@link UsernamePasswordAuthProvider} 拿到 null 后跳过全部计数逻辑。
+     *
+     * <p>缓存后端取自 {@link CacheProvider}：默认是内存实现（重启清零、多实例各算各的），
+     * 引入集中式实现后自动升级为全局计数，本类不用改。
+     */
+    @Bean
+    @ConditionalOnMissingBean(LoginAttemptGuard.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security.lockout", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public LoginAttemptGuard loginAttemptGuard(CacheProvider cacheProvider,
+                                               FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.Lockout lockout = properties.getLockout();
+        return new LoginAttemptGuard(cacheProvider, lockout.getMaxFailures(), lockout.getDuration());
+    }
+
+    /**
+     * 验证码生成/校验能力，核心默认实现是图形字符验证码。
+     *
+     * <p>不受 {@code describeadmin.security.captcha.enabled} 影响——"能力是否存在"
+     * 与"是否强制生效"分离，与 {@link #passwordEncoder()}/{@link #tokenStore} 是同一模式。
+     * 未来的滑块验证码、Cloudflare Turnstile 等插件通过注册自己的 {@link CaptchaProvider}
+     * Bean 覆盖本默认实现即可，不需要改这里。
+     */
+    @Bean
+    @ConditionalOnMissingBean(CaptchaProvider.class)
+    public CaptchaProvider captchaProvider(CacheProvider cacheProvider, FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.Captcha captcha = properties.getCaptcha();
+        return new ImageCaptchaProvider(cacheProvider, captcha.getTtl(), captcha.getCodeLength());
+    }
+
+    /**
+     * 渐进式验证码的强制生效开关，受 {@code describeadmin.security.captcha.enabled} 控制。
+     *
+     * <p>依赖可选的 {@link LoginAttemptGuard}——关闭失败次数限制
+     * （{@code describeadmin.security.lockout.enabled=false}）时验证码同样不再拦截，
+     * 见 {@link CaptchaGuard} 类注释"已知取舍"第 2 条。
+     *
+     * <p>装配时校验 {@code triggerThreshold < lockout.maxFailures}：配置错误必须在启动期
+     * 直接拒绝，而不是运行到一半才发现验证码从未生效过。
+     */
+    @Bean
+    @ConditionalOnMissingBean(CaptchaGuard.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security.captcha", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public CaptchaGuard captchaGuard(CaptchaProvider captchaProvider, FrameworkSecurityProperties properties,
+                                     ObjectProvider<LoginAttemptGuard> attemptGuardProvider) {
+        FrameworkSecurityProperties.Captcha captcha = properties.getCaptcha();
+        LoginAttemptGuard attemptGuard = attemptGuardProvider.getIfAvailable();
+        if (attemptGuard != null && captcha.getTriggerThreshold() >= properties.getLockout().getMaxFailures()) {
+            throw new IllegalStateException(
+                    "describeadmin.security.captcha.trigger-threshold(" + captcha.getTriggerThreshold()
+                            + ") 必须小于 describeadmin.security.lockout.max-failures("
+                            + properties.getLockout().getMaxFailures() + ")");
+        }
+        return new CaptchaGuard(captchaProvider, attemptGuard, captcha.getTriggerThreshold(),
+                captcha.getApplicableTypes());
+    }
+
+    /**
      * 内置用户名密码登录。
      *
      * <p>仅在业务方提供了 {@link AuthUserLoader} 实现时才注册——框架不知道用户存在哪里，
      * 没有 loader 就没法认证，此时静默不注册比启动失败更合适
      * （纯插件登录的项目可能完全不需要用户名密码方式）。
+     *
+     * <p>{@code ObjectProvider} 承接可选的 {@link LoginAttemptGuard}：
+     * 直接注入会在关闭失败次数限制时因找不到 Bean 而启动失败。
      */
     @Bean
     @ConditionalOnBean(AuthUserLoader.class)
     @ConditionalOnMissingBean(UsernamePasswordAuthProvider.class)
     public UsernamePasswordAuthProvider usernamePasswordAuthProvider(
-            AuthUserLoader userLoader, PasswordEncoder passwordEncoder) {
-        return new UsernamePasswordAuthProvider(userLoader, passwordEncoder);
+            AuthUserLoader userLoader, PasswordEncoder passwordEncoder,
+            ObjectProvider<LoginAttemptGuard> attemptGuard) {
+        return new UsernamePasswordAuthProvider(userLoader, passwordEncoder,
+                attemptGuard.getIfAvailable());
     }
 
     /**
@@ -95,7 +192,7 @@ public class FrameworkSecurityAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(TokenStore.class)
     public TokenStore tokenStore(FrameworkSecurityProperties properties) {
-        return new InMemoryTokenStore(properties.getTokenTtl());
+        return new InMemoryTokenStore(properties.getTokenTtl(), properties.getRefreshToken().getTtl());
     }
 
     /**
@@ -106,6 +203,47 @@ public class FrameworkSecurityAutoConfiguration {
     @ConditionalOnMissingBean(CurrentUserProvider.class)
     public CurrentUserProvider securityContextCurrentUserProvider() {
         return new SecurityContextCurrentUserProvider();
+    }
+
+    /**
+     * 把 SecurityContext 里登录用户的部门/数据范围暴露给 framework-common 的
+     * {@link DataScopeProvider} 契约，使 framework-mybatis-starter 的数据权限拦截器
+     * 能在不依赖 Spring Security 的前提下做行级过滤。
+     */
+    @Bean
+    @ConditionalOnMissingBean(DataScopeProvider.class)
+    public DataScopeProvider securityContextDataScopeProvider() {
+        return new SecurityContextDataScopeProvider();
+    }
+
+    /**
+     * 把 SecurityContext 里的权限点暴露给 framework-common 的
+     * {@link PermissionChecker} 契约，使 {@code BaseController} 的通用 CRUD 端点
+     * 能在不依赖 Spring Security 的前提下做权限校验。
+     *
+     * <p>{@code describeadmin.security.permission-enabled=false} 时本 Bean 不注册，
+     * 消费方退回 {@link PermissionChecker#PERMIT_ALL}。
+     */
+    @Bean
+    @ConditionalOnMissingBean(PermissionChecker.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security", name = "permission-enabled",
+            havingValue = "true", matchIfMissing = true)
+    public PermissionChecker securityContextPermissionChecker() {
+        return new SecurityContextPermissionChecker();
+    }
+
+    /**
+     * 方法级安全，使业务方可以在自己的端点上用 {@code @PreAuthorize("hasAuthority('xxx:yyy:add')")}。
+     *
+     * <p>与 {@link PermissionChecker} 受同一个开关控制，避免出现"通用端点校验、
+     * 自定义端点不校验"这种一半生效的状态。
+     */
+    @AutoConfiguration
+    @EnableMethodSecurity
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnProperty(prefix = "describeadmin.security", name = "permission-enabled",
+            havingValue = "true", matchIfMissing = true)
+    public static class MethodSecurityConfiguration {
     }
 
     /**
@@ -136,12 +274,38 @@ public class FrameworkSecurityAutoConfiguration {
             return new TokenAuthenticationFilter(tokenStore);
         }
 
+        /**
+         * 强制改密门禁。只对 {@code LoginUser.pwdResetRequired} 为 true 的会话生效，
+         * 未标记用户零影响，因此不需要单独的开关——随 {@code describeadmin.security.enabled} 装配。
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public PasswordResetRequiredFilter passwordResetRequiredFilter(
+                ObjectProvider<ObjectMapper> objectMapper) {
+            return new PasswordResetRequiredFilter(objectMapper.getIfAvailable(ObjectMapper::new));
+        }
+
+        /**
+         * 授权异常的 advice 映射。
+         *
+         * <p>无条件注册（不随 permission-enabled 开关走）：即使框架的权限点校验被关掉，
+         * Spring Security 自身仍可能抛出 {@code AccessDeniedException}，
+         * 而 {@code GlobalExceptionHandler} 的 Throwable 兜底会把它变成 500。
+         * 见 {@link SecurityExceptionHandler} 的类注释。
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public SecurityExceptionHandler securityExceptionHandler() {
+            return new SecurityExceptionHandler();
+        }
+
         @Bean
         @ConditionalOnMissingBean
         public SecurityFilterChain describeadminSecurityFilterChain(
                 HttpSecurity http,
                 FrameworkSecurityProperties properties,
                 TokenAuthenticationFilter tokenFilter,
+                PasswordResetRequiredFilter pwdResetFilter,
                 ResultAuthenticationEntryPoint entryPoint) throws Exception {
 
             List<String> permitAll = new ArrayList<>(BUILT_IN_PERMIT_ALL);
@@ -162,7 +326,9 @@ public class FrameworkSecurityAutoConfiguration {
                     .exceptionHandling(ex -> ex
                             .authenticationEntryPoint(entryPoint)
                             .accessDeniedHandler(entryPoint))
-                    .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class);
+                    .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class)
+                    // 排在 tokenFilter 之后：依赖它已经把 LoginUser 填进 SecurityContext
+                    .addFilterAfter(pwdResetFilter, TokenAuthenticationFilter.class);
 
             if (!properties.getAllowedOrigins().isEmpty()) {
                 http.cors(Customizer.withDefaults());

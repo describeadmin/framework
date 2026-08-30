@@ -26,6 +26,9 @@ public enum ResultCode {
     UNAUTHORIZED(40100, "未认证或登录已过期"),
     AUTH_PROVIDER_NOT_FOUND(40101, "不支持的登录方式"),
     AUTH_FAILED(40102, "认证失败"),
+    CAPTCHA_REQUIRED(40103, "需要验证码"),
+    CAPTCHA_INVALID(40104, "验证码错误或已过期"),
+    PASSWORD_RESET_REQUIRED(40105, "需要先修改密码"),
 
     FORBIDDEN(40300, "无权访问"),
 

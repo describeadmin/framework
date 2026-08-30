@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.describeadmin</groupId>
+    <artifactId>framework-parent</artifactId>
+    <version>0.2.0</version>
+  </parent>
+
+  <artifactId>framework-cache-starter</artifactId>
+
+  <name>describeadmin :: framework-cache-starter</name>
+  <description>CacheProvider SPI 与零依赖的内存实现；Redis 等集中式实现以插件形态提供</description>
+
+  <!--
+    ⚠️ 本模块【不得】引入任何缓存中间件依赖（Redis、Caffeine 等）。
+
+    它的职责只有两条：定义 CacheProvider 契约，以及提供一个不引入任何第三方依赖的
+    内存兜底实现，使框架"开箱即用"。具体的集中式实现走插件
+    （framework-cache-redis-starter），由业务方按需引入。
+
+    这条约束由父 POM 的 maven-enforcer-plugin 在构建期强制。
+  -->
+
+  <dependencies>
+    <!--
+      只依赖 spring-boot-autoconfigure，不依赖 spring-boot-starter-web：
+      定时任务、消息消费者这类非 Web 的业务方同样可能需要缓存。
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-configuration-processor</artifactId>
+      <optional>true</optional>
+    </dependency>
+  </dependencies>
+
+</project>

@@ -4,9 +4,12 @@ import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseController;
+import io.github.describeadmin.security.api.TokenStore;
+import io.github.describeadmin.system.core.OperLog;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.SysUserMapper;
 import io.github.describeadmin.system.service.SysUserService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,9 +32,11 @@ import java.util.Map;
 public class SysUserController extends BaseController<SysUserService, SysUserMapper, SysUser> {
 
     private final SysUserService service;
+    private final TokenStore tokenStore;
 
-    public SysUserController(SysUserService service) {
+    public SysUserController(SysUserService service, TokenStore tokenStore) {
         this.service = service;
+        this.tokenStore = tokenStore;
     }
 
     @Override
@@ -53,29 +58,66 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
                 "创建用户请使用 POST /api/system/user/with-password");
     }
 
+    @OperLog(module = "system:user", description = "创建用户")
+    @PreAuthorize("hasAuthority('system:user:add')")
     @PostMapping("/with-password")
     public Result<SysUser> createWithPassword(@RequestBody Map<String, Object> body) {
         SysUser u = new SysUser();
         u.setUsername(asString(body.get("username")));
         u.setNickname(asString(body.get("nickname")));
+        u.setMobile(asString(body.get("mobile")));
+        u.setEmail(asString(body.get("email")));
         if (body.get("deptId") != null) {
             u.setDeptId(Long.valueOf(String.valueOf(body.get("deptId"))));
         }
         return Result.ok(service.createUser(u, asString(body.get("password")), asIdList(body.get("roleIds"))));
     }
 
+    /**
+     * 覆写通用编辑端点，补手机号/邮箱唯一性校验——BaseController.update() 没有这个钩子。
+     *
+     * <p>密码字段不在这里处理：编辑表单不会把密码哈希原样带回来，反序列化后
+     * {@code entity.password} 必然是 null，而 {@link SysUser#getPassword()}
+     * 已经用 {@code @TableField(updateStrategy = NOT_NULL)} 锁住，null 不会覆盖已有密码，
+     * 不需要 controller 层再处理一遍。
+     *
+     * <p>把 {@code status} 显式改为禁用值（0）时顺带吊销该用户的全部令牌——否则被禁用的账号
+     * 已登录的会话仍然有效，要等令牌自然过期才失效，与"禁用立即生效"的直觉预期不符
+     * （见 {@link TokenStore#revokeAllOf(Long)} 的 javadoc）。改其他字段不触发吊销。
+     */
+    @Override
+    @OperLog(module = "system:user", description = "更新用户")
+    @PreAuthorize("hasAuthority('system:user:edit')")
+    @PutMapping("/{id}")
+    public Result<SysUser> update(@PathVariable Long id, @RequestBody SysUser entity) {
+        service.assertMobileEmailAvailable(id, entity.getMobile(), entity.getEmail());
+        entity.setId(id);
+        if (!service.updateById(entity)) {
+            throw new BizException(ResultCode.NOT_FOUND, "记录不存在或已被他人修改: " + id);
+        }
+        if (entity.getStatus() != null && entity.getStatus() == 0) {
+            tokenStore.revokeAllOf(id);
+        }
+        return Result.ok(service.getById(id));
+    }
+
+    @OperLog(module = "system:user", description = "重置密码")
+    @PreAuthorize("hasAuthority('system:user:edit')")
     @PutMapping("/{userId}/password")
     public Result<Void> resetPassword(@PathVariable Long userId, @RequestBody Map<String, String> body) {
         service.resetPassword(userId, body.get("password"));
         return Result.ok();
     }
 
+    @PreAuthorize("hasAuthority('system:user:list')")
     @GetMapping("/{userId}/roles")
     public Result<List<Long>> roles(@PathVariable Long userId) {
         return Result.ok(service.roleIdsOf(userId));
     }
 
     /** 重新授予角色。整体覆盖而非增量修改。 */
+    @OperLog(module = "system:user", description = "分配角色")
+    @PreAuthorize("hasAuthority('system:user:edit')")
     @PutMapping("/{userId}/roles")
     public Result<Void> assignRoles(@PathVariable Long userId, @RequestBody List<Long> roleIds) {
         service.assignRoles(userId, roleIds);

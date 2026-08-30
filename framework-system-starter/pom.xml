@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.describeadmin</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>0.1.1</version>
+    <version>0.2.0</version>
   </parent>
 
   <artifactId>framework-system-starter</artifactId>
@@ -46,6 +46,25 @@
       <groupId>io.github.describeadmin</groupId>
       <artifactId>framework-web-starter</artifactId>
     </dependency>
+
+    <!--
+      字典 / 参数配置读多写少，读穿一层缓存收益明显。依赖的是契约模块，
+      不是任何具体缓存中间件——与 framework-security-starter 引入它的理由相同。
+    -->
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-cache-starter</artifactId>
+    </dependency>
+
+    <!--
+      操作日志切面所需。轻量级（spring-aop + aspectjweaver），
+      不在父 POM enforce-core-thin 的封禁清单里。
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-configuration-processor</artifactId>

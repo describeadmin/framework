@@ -1,14 +1,23 @@
 package io.github.describeadmin.system.autoconfigure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.describeadmin.mybatis.api.DataScopeTableCustomizer;
 import io.github.describeadmin.security.api.AuthUserLoader;
+import io.github.describeadmin.security.api.PasswordPolicy;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityAutoConfiguration;
 import io.github.describeadmin.system.core.DbAuthUserLoader;
+import io.github.describeadmin.system.core.DevAdminSeeder;
+import io.github.describeadmin.system.core.OperLogAspect;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
+import io.github.describeadmin.system.service.SysConfigService;
+import io.github.describeadmin.system.service.SysOperLogService;
+import io.github.describeadmin.system.service.SysRoleService;
 import io.github.describeadmin.system.service.SysUserService;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 
@@ -35,6 +44,7 @@ import org.springframework.context.annotation.ComponentScan;
 @AutoConfiguration(before = FrameworkSecurityAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "describeadmin.system", name = "enabled",
         havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(FrameworkSystemProperties.class)
 @MapperScan("io.github.describeadmin.system.mapper")
 @ComponentScan(basePackages = {
         "io.github.describeadmin.system.service",
@@ -51,7 +61,50 @@ public class FrameworkSystemAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(AuthUserLoader.class)
     public DbAuthUserLoader dbAuthUserLoader(SysUserService userService,
-                                             SysRelationMapper relationMapper) {
-        return new DbAuthUserLoader(userService, relationMapper);
+                                             SysRelationMapper relationMapper,
+                                             SysConfigService configService) {
+        return new DbAuthUserLoader(userService, relationMapper, configService);
+    }
+
+    /**
+     * 开发种子管理员。默认不装配——只有 {@code application-local.yml} 显式打开
+     * {@code describeadmin.system.dev-seed.enabled=true} 时才创建随机口令的管理员账号，
+     * 并把明文写到项目根 {@code .passwd}。生产 profile 永远不会有这个 Bean。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "describeadmin.system.dev-seed", name = "enabled",
+            havingValue = "true")
+    public DevAdminSeeder devAdminSeeder(SysUserService userService, SysRoleService roleService,
+                                         PasswordPolicy passwordPolicy,
+                                         FrameworkSystemProperties properties) {
+        return new DevAdminSeeder(userService, roleService, passwordPolicy, properties.getDevSeed());
+    }
+
+    /**
+     * 登记 {@code sys_user} 参与数据权限过滤。
+     *
+     * <p>其余系统管理表（角色/菜单/部门）不登记——它们是权限体系自身的配置数据，
+     * 不是"业务数据"，不该被数据权限过滤掉，否则一个只有"本部门"范围的管理员
+     * 会连部门树、菜单树都查不全，界面直接坏掉。
+     */
+    @Bean
+    public DataScopeTableCustomizer sysUserDataScopeTableCustomizer() {
+        return tableToDeptColumn -> tableToDeptColumn.put("sys_user", "dept_id");
+    }
+
+    /**
+     * 操作日志切面。
+     *
+     * <p>不在 {@code @ComponentScan} 的两个基础包（service/controller）里，
+     * 与 {@link DbAuthUserLoader} 一样显式 {@code @Bean} 注册——{@code core} 包下的类
+     * 一律走这条路径，不悄悄再加一个 basePackage。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "describeadmin.system.oper-log", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public OperLogAspect operLogAspect(SysOperLogService operLogService, ObjectMapper objectMapper) {
+        return new OperLogAspect(operLogService, objectMapper);
     }
 }

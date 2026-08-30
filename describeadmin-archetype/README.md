@@ -32,7 +32,8 @@ mvn archetype:generate -B \
 
 `sample-app` 的 POM 里有 `maven-toolchains-plugin`，本脚手架**刻意不带**。
 
-框架自身构建要求 JDK 21，那是框架的事。业务方的约束只有一条：**Maven 进程自身跑在 JDK 17+**
+框架自身构建也只要求 JDK 17+（同样不再用 toolchains，见 `develop_plan.md` 2.2.2「第八轮修订」）。
+业务方的约束同样只有一条：**Maven 进程自身跑在 JDK 17+**
 （`spring-boot-maven-plugin:repackage` 的硬要求）。至于用哪个发行版、哪个大版本，
 是业务方的自由 —— 产物侧已由 `<java.version>17</java.version>`（即 `release=17`）钉死，
 无论用多新的 JDK 构建，字节码都落在 Java 17。

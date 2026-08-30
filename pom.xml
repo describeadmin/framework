@@ -15,7 +15,7 @@
 
   <groupId>io.github.describeadmin</groupId>
   <artifactId>framework-parent</artifactId>
-  <version>0.1.1</version>
+  <version>0.2.0</version>
   <packaging>pom</packaging>
 
   <name>describeadmin :: framework-parent</name>
@@ -51,7 +51,21 @@
     <module>framework-web-starter</module>
     <module>framework-security-starter</module>
     <module>framework-mybatis-starter</module>
+    <module>framework-cache-starter</module>
     <module>framework-system-starter</module>
+    <module>framework-storage-starter</module>
+    <module>framework-notify-starter</module>
+
+    <!--
+      这里【只有核心模块】。可选插件（framework-cache-redis-starter 等）一律独立成仓，
+      清单见 docs 仓的 registry.md 与 repos.yml。
+
+      插件不在本 reactor 里，是为了斩断两条耦合：
+        - 版本线：框架发 0.3.0 时，一行没改的插件不必跟着发；插件修 bug 也不必等框架的发布窗口
+        - 发布：mvn deploy 不会把插件一起推上 Central
+      还有一个副作用是刻意要的 —— 插件只能以 import framework-bom 的方式消费框架，
+      也就是业务方的姿势，于是业务方会遇到的问题会先在插件仓暴露。
+    -->
 
     <!--
       业务方工程脚手架。放在最后：它不参与框架的依赖图，只是与框架同版本发布的一个模板产物。
@@ -66,11 +80,14 @@
 
     <!--
       Java 版本策略（develop_plan.md 2.2.2）：
-        构建用 JDK 21（由 toolchains 指定，与 PATH 无关）
+        构建 JDK 只要求 17 或更高，用哪个由构建者自己定（enforcer 的 requireJavaVersion 兜底）
         编译目标 release=17，使业务方 Java 17+ 即可使用
       不要把 release 改成 21 —— 那会把仍在 17 上的使用方挡在门外。
+
+      不再用 maven-toolchains-plugin 钉死构建 JDK：release=17 本身已保证产物在 Java 17 上可运行，
+      再钉一个具体版本只会让没配 ~/.m2/toolchains.xml 的协作者/AI 以
+      "Cannot find matching toolchain" 直接构建失败，比它要防的坑更劝退（VERSION_BASELINE 第八轮）。
     -->
-    <java.build.version>21</java.build.version>
     <maven.compiler.release>17</maven.compiler.release>
 
     <!-- 上游版本，事实来源见 VERSION_BASELINE.md -->
@@ -92,7 +109,6 @@
     <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
     <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
     <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
-    <maven-toolchains-plugin.version>3.3.0</maven-toolchains-plugin.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
     <central-publishing-plugin.version>0.11.0</central-publishing-plugin.version>
   </properties>
@@ -167,9 +183,33 @@
       </dependency>
       <dependency>
         <groupId>io.github.describeadmin</groupId>
+        <artifactId>framework-cache-starter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.describeadmin</groupId>
         <artifactId>framework-system-starter</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.github.describeadmin</groupId>
+        <artifactId>framework-storage-starter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.describeadmin</groupId>
+        <artifactId>framework-notify-starter</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <!--
+        ⚠️ 独立成仓的插件【不在此处登记】。
+
+        写在这里会让 framework-bom 用 ${project.version} 去仲裁插件版本，
+        而插件已经有了自己的版本线 —— 业务方引一个不写版本号的插件时，
+        拿到的会是一个与框架同号、但根本不存在的制品，报错只说"找不到"，
+        不会有任何东西指向这里。插件版本由业务方自己写。
+      -->
 
     </dependencies>
   </dependencyManagement>
@@ -206,27 +246,6 @@
     </pluginManagement>
 
     <plugins>
-      <!--
-        Toolchains：显式声明构建所需的 JDK，Maven 自行从 ~/.m2/toolchains.xml 中查找。
-        这样构建结果与 PATH 上是哪个 java 无关（develop_plan.md 2.2.2）。
-        首次配置见 scripts/toolchains.xml.sample。
-      -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-toolchains-plugin</artifactId>
-        <version>${maven-toolchains-plugin.version}</version>
-        <executions>
-          <execution>
-            <goals>
-              <goal>select-jdk-toolchain</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <version>${java.build.version}</version>
-        </configuration>
-      </plugin>
-
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -248,6 +267,15 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven-surefire-plugin.version}</version>
+        <configuration>
+          <!--
+            测试 JVM 必须显式指定 UTF-8。默认取平台编码，中文 Windows 上是 GBK，
+            断言里的中文会与被测代码里的中文对不上，而失败信息本身也是乱码，
+            排查方向会完全跑偏。见 CLAUDE.md 3.6 与 VERSION_BASELINE.md 发现 ④⑤。
+            sample-app 早已配了这一行，框架侧因为此前没有任何测试而一直空缺。
+          -->
+          <argLine>-Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8</argLine>
+        </configuration>
       </plugin>
 
       <!--
@@ -268,6 +296,14 @@
                 <requireMavenVersion>
                   <version>[3.9.0,)</version>
                 </requireMavenVersion>
+                <!--
+                  构建 JDK 只要求 17+。release=17 已保证产物在 Java 17 上可运行，
+                  构建者用 17 / 21 / 更高都行；不再用 maven-toolchains-plugin 钉死具体版本
+                  （develop_plan.md 2.2.2，VERSION_BASELINE 第八轮）。
+                -->
+                <requireJavaVersion>
+                  <version>[17,)</version>
+                </requireJavaVersion>
                 <!--
                   框架的任何模块都不得引入 JDBC 驱动（develop_plan.md 2.3.2 / CLAUDE.md 3.4）。
                   驱动由业务方声明；此处从构建期堵死，防止有人"顺手"加进来。
@@ -299,6 +335,65 @@
                   <message>
                     本项目锁定 Jackson 2.x（com.fasterxml.jackson.*）。
                     tools.jackson.* 是 Jackson 3，属于 Spring Boot 4.x 生态。
+                  </message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+
+          <!--
+            单独成一个 execution 而不与上面两条合并：本条只适用于核心。
+            插件已独立成仓、不继承本 POM，因此天然不受这条约束 ——
+            但它们仍要自带上面那两条（JDBC 驱动、Jackson 3），见 registry.md 准入规范。
+          -->
+          <execution>
+            <id>enforce-core-thin</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <!--
+                  「核心薄、能力可插拔」的构建期门禁。
+
+                  核心模块只允许依赖 Spring Boot 自家 starter、MyBatis-Plus 与框架自身模块。
+                  下面这些是典型的"重实现"：它们各自都应当以独立 starter 的形态按需引入
+                  （如 Redis 缓存 → framework-cache-redis-starter），而不是压进核心，
+                  让所有业务方——包括根本用不到的那些——都背上这份依赖。
+
+                  这条规则不能只写在规范里：依赖是"顺手加一行"就能引入的，
+                  而它一旦进了已发布的核心制品，再想摘出去就是破坏性变更。
+                  插件模块自身需要这些依赖，在各自 pom 里覆盖本规则即可。
+                -->
+                <bannedDependencies>
+                  <searchTransitive>true</searchTransitive>
+                  <excludes>
+                    <exclude>org.springframework.boot:spring-boot-starter-data-redis</exclude>
+                    <exclude>redis.clients:jedis</exclude>
+                    <exclude>org.apache.poi:*</exclude>
+                    <exclude>com.alibaba:easyexcel</exclude>
+                    <exclude>org.springdoc:*</exclude>
+                    <exclude>com.github.xiaoymin:*</exclude>
+                    <exclude>org.quartz-scheduler:*</exclude>
+                    <exclude>com.squareup.okhttp3:*</exclude>
+                    <exclude>org.apache.httpcomponents.client5:*</exclude>
+                    <!-- 对象存储 SDK：具体实现应做成 framework-storage-<厂商>-starter 插件 -->
+                    <exclude>com.aliyun.oss:*</exclude>
+                    <exclude>com.aliyun:aliyun-java-sdk-*</exclude>
+                    <exclude>com.qcloud:cos_api</exclude>
+                    <exclude>com.amazonaws:aws-java-sdk-s3</exclude>
+                    <exclude>software.amazon.awssdk:s3</exclude>
+                    <exclude>io.minio:minio</exclude>
+                    <!-- 厂商推送/消息 SDK：具体实现应做成 framework-notify-<厂商>-starter 插件 -->
+                    <exclude>com.aliyun:dingtalk</exclude>
+                    <exclude>com.dingtalk.open:*</exclude>
+                    <exclude>com.github.binarywang:weixin-java-cp</exclude>
+                    <exclude>com.aliyun:dysmsapi*</exclude>
+                    <exclude>com.twilio.sdk:twilio</exclude>
+                  </excludes>
+                  <message>
+                    核心模块不得引入重量级第三方依赖。这类能力应做成独立的
+                    framework-&lt;能力&gt;-starter 由业务方按需引入。见 CLAUDE.md 第 4 节。
                   </message>
                 </bannedDependencies>
               </rules>

@@ -54,4 +54,24 @@ public interface SysRelationMapper {
     @Insert("<script>INSERT INTO sys_role_menu (role_id, menu_id) VALUES "
             + "<foreach collection='menuIds' item='mid' separator=','>(#{roleId}, #{mid})</foreach></script>")
     int insertRoleMenus(@Param("roleId") Long roleId, @Param("menuIds") List<Long> menuIds);
+
+    /**
+     * 当前用户全部角色的数据权限范围与默认首页，供 {@code DataScopeResolver}/
+     * {@code HomePathResolver} 合并。按 {@code sort} 升序——首页合并规则是
+     * "取排序靠前且非空的第一个"，需要确定性顺序。
+     */
+    @Select("SELECT r.id AS role_id, r.data_scope AS data_scope, r.home_path AS home_path FROM sys_role r "
+            + "JOIN sys_user_role ur ON ur.role_id = r.id "
+            + "WHERE ur.user_id = #{userId} AND r.deleted = 0 ORDER BY r.sort")
+    List<RoleScope> selectDataScopesByUserId(@Param("userId") Long userId);
+
+    @Select("SELECT dept_id FROM sys_role_dept WHERE role_id = #{roleId}")
+    List<Long> selectDeptIdsByRoleId(@Param("roleId") Long roleId);
+
+    @Delete("DELETE FROM sys_role_dept WHERE role_id = #{roleId}")
+    int deleteRoleDepts(@Param("roleId") Long roleId);
+
+    @Insert("<script>INSERT INTO sys_role_dept (role_id, dept_id) VALUES "
+            + "<foreach collection='deptIds' item='did' separator=','>(#{roleId}, #{did})</foreach></script>")
+    int insertRoleDepts(@Param("roleId") Long roleId, @Param("deptIds") List<Long> deptIds);
 }

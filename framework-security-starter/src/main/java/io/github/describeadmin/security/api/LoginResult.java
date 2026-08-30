@@ -20,14 +20,22 @@ public class LoginResult implements Serializable {
 
     private final String token;
 
-    /** 令牌有效期（秒），供前端决定何时提示续期。 */
+    /** 刷新令牌，可为 null——语义与 {@link IssuedTokens#getRefreshToken()} 一致。 */
+    private final String refreshToken;
+
+    /** 令牌有效期（秒），供前端决定何时提示续期。语义不变：始终是 access token 的 TTL。 */
     private final long expiresIn;
+
+    /** 刷新令牌有效期（秒）。{@code refreshToken} 为 null 时本字段为 0。 */
+    private final long refreshExpiresIn;
 
     private final LoginUser user;
 
-    public LoginResult(String token, long expiresIn, LoginUser user) {
+    public LoginResult(String token, String refreshToken, long expiresIn, long refreshExpiresIn, LoginUser user) {
         this.token = token;
+        this.refreshToken = refreshToken;
         this.expiresIn = expiresIn;
+        this.refreshExpiresIn = refreshExpiresIn;
         this.user = user;
     }
 
@@ -35,8 +43,16 @@ public class LoginResult implements Serializable {
         return token;
     }
 
+    public String getRefreshToken() {
+        return refreshToken;
+    }
+
     public long getExpiresIn() {
         return expiresIn;
+    }
+
+    public long getRefreshExpiresIn() {
+        return refreshExpiresIn;
     }
 
     public LoginUser getUser() {

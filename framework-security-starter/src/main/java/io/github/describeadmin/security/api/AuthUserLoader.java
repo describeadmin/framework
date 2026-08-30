@@ -28,4 +28,25 @@ public interface AuthUserLoader {
      *         （是否存在属于认证结果的一部分，由框架统一转换为对外的错误信息）
      */
     Optional<AuthUser> loadByUsername(String username);
+
+    /**
+     * 按用户 id 加载用户，供认证插件在把凭证换成 {@code userId} 之后拼装完整用户使用。
+     *
+     * <p><b>为什么是 default 方法</b>：本方法是在接口发布之后新增的，
+     * 写成抽象方法会让所有已实现 {@code AuthUserLoader} 的业务方直接编译失败——
+     * 那是一次没有必要的破坏性变更（手法同 {@link TokenStore#listActive()}）。
+     * 默认返回空，语义是"本实现不支持按 id 反查"。
+     *
+     * <p>典型场景：手机号/邮箱/第三方登录等插件式 {@code AuthProvider} 先把凭证换成
+     * {@code userId}（核心字段如手机号直接查 {@code SysUserService}；第三方 openId
+     * 等自建映射表），再调用本方法拿到角色/权限/数据权限/首页路径俱全的
+     * {@link AuthUser}，不用重新实现一遍"由用户 id 拼装完整用户"的逻辑。
+     *
+     * @param userId 用户 id
+     * @return 用户；不存在或本实现不支持按 id 查询时返回 {@link Optional#empty()}，
+     *         <b>不要抛异常</b>
+     */
+    default Optional<AuthUser> loadByUserId(Long userId) {
+        return Optional.empty();
+    }
 }

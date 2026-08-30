@@ -11,6 +11,8 @@ target/
 !.env.example
 *.gpg
 *.asc
+# dev-seed 生成的初始管理员明文口令
+.passwd
 
 # ---- IDE ----
 .idea/

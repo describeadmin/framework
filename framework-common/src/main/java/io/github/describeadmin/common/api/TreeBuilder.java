@@ -1,4 +1,4 @@
-package io.github.describeadmin.system.core;
+package io.github.describeadmin.common.api;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -17,6 +17,10 @@ import java.util.function.Function;
  *
  * <p>数据量真正大到内存建树不可接受时，应改用物化路径（{@code ancestors} 字段）方案，
  * 那同样只需要基础 SQL，不必引入 CTE。
+ *
+ * <p>本类位于 {@code api} 包下，属于兼容性承诺范围。0.2.0 之前它在
+ * {@code framework-system-starter} 的 {@code core} 包下，业务方建部门/字典/分类树时
+ * 拿不到；上提到本模块后，只用 Web 层、不用系统管理模块的业务方也能复用。
  */
 public final class TreeBuilder {
 

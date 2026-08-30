@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.describeadmin</groupId>
+    <artifactId>framework-parent</artifactId>
+    <version>0.2.0</version>
+  </parent>
+
+  <artifactId>framework-notify-starter</artifactId>
+
+  <name>describeadmin :: framework-notify-starter</name>
+  <description>NotifyChannel SPI、NotifyDispatcher 路由与零依赖的日志通道；钉钉/企业微信/短信等实现以插件形态提供</description>
+
+  <!--
+    ⚠️ 本模块【不得】引入任何具体通知渠道的 SDK 依赖（钉钉、企业微信、短信网关等），
+    也不得引入通用 HTTP 客户端（okhttp3、httpcomponents.client5 已由父 POM 的
+    enforce-core-thin 规则拦截）。
+
+    它的职责只有三条：定义 NotifyChannel 契约、提供按 channel() 键路由的
+    NotifyDispatcher，以及提供一个不引入任何第三方依赖的日志通道，使框架"开箱即用"。
+    具体的厂商对接走插件（如未来的 framework-notify-dingtalk-starter），由业务方按需引入。
+
+    这条约束由父 POM 的 maven-enforcer-plugin 在构建期强制。
+  -->
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+
+    <!-- LogNotifyChannel 直接用 SLF4J 记日志；不经 spring-boot-starter-logging，版本由 spring-boot-dependencies 仲裁 -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-configuration-processor</artifactId>
+      <optional>true</optional>
+    </dependency>
+  </dependencies>
+
+</project>

@@ -24,6 +24,9 @@ public class FrameworkMybatisProperties {
     /** 是否开启溢出总页数后进行处理（true 时页码超出总页数会返回首页而非空集）。 */
     private boolean overflow = false;
 
+    /** 数据权限。 */
+    private final DataScope dataScope = new DataScope();
+
     public DbType getDbType() {
         return dbType;
     }
@@ -46,5 +49,31 @@ public class FrameworkMybatisProperties {
 
     public void setOverflow(boolean overflow) {
         this.overflow = overflow;
+    }
+
+    public DataScope getDataScope() {
+        return dataScope;
+    }
+
+    /**
+     * 数据权限，前缀 {@code describeadmin.mybatis.data-scope}。
+     */
+    public static class DataScope {
+
+        /**
+         * 是否启用数据权限拦截器。
+         *
+         * <p>关闭后行为等同于没有引入这个机制——已登记参与数据权限的表也不再被过滤。
+         * 仅建议在排查问题时临时关闭。
+         */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 }

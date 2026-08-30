@@ -7,9 +7,11 @@
 #
 #   mvn spring-boot:run -Dspring-boot.run.profiles=local
 #
-# ⚠️ 仅供本地开发：默认账号 admin / admin123，且每次启动都会重放建表与种子脚本。
+# ⚠️ 仅供本地开发：每次启动都会重放建表与种子脚本。
+#    首次启动时 dev-seed 会创建管理员 admin，口令【随机生成】——见启动日志或项目根目录的
+#    .passwd 文件（已在 .gitignore 中）。仓库里没有任何固定默认口令。
 #    真实环境请另建 application-dev.yml / application-prod.yml，
-#    并把 spring.sql.init.mode 设为 never。
+#    把 spring.sql.init.mode 设为 never，并且【不要】打开 describeadmin.system.dev-seed。
 
 server:
   port: ${serverPort}
@@ -46,6 +48,11 @@ describeadmin:
     token-ttl: 12h
     # allowed-origins 刻意留空：开发期走前端 dev server 的代理，从根本上不产生跨域，
     # 也就不存在「开发期放开的 CORS 被带上生产」这类事故
+  system:
+    dev-seed:
+      # 只在本地开发打开：库里没有用户时创建管理员 admin，口令随机生成并写到项目根 .passwd。
+      # ⚠️ application-dev.yml / application-prod.yml 里【不要】有这一段。
+      enabled: true
 
 logging:
   level:

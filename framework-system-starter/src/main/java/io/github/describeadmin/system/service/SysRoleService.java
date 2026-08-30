@@ -31,4 +31,23 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
     public List<Long> menuIdsOf(Long roleId) {
         return relationMapper.selectMenuIdsByRoleId(roleId);
     }
+
+    /**
+     * 重新指定自定义数据权限的部门列表，同样是"重建"语义。
+     *
+     * <p>只在角色的 {@code dataScope = CUSTOM} 时有意义；对其余档位的角色调用本方法
+     * 不会报错，但写入的部门列表在数据权限拦截器里不会被读取（见
+     * {@code DeptDataPermissionHandler}），调用方自行保证 {@code data_scope} 已经是 CUSTOM。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void assignDataScopeDepts(Long roleId, List<Long> deptIds) {
+        relationMapper.deleteRoleDepts(roleId);
+        if (deptIds != null && !deptIds.isEmpty()) {
+            relationMapper.insertRoleDepts(roleId, deptIds);
+        }
+    }
+
+    public List<Long> deptIdsOf(Long roleId) {
+        return relationMapper.selectDeptIdsByRoleId(roleId);
+    }
 }

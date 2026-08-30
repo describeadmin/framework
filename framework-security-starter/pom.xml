@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.describeadmin</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>0.1.1</version>
+    <version>0.2.0</version>
   </parent>
 
   <artifactId>framework-security-starter</artifactId>
@@ -19,6 +19,16 @@
     <dependency>
       <groupId>io.github.describeadmin</groupId>
       <artifactId>framework-common</artifactId>
+    </dependency>
+
+    <!--
+      登录失败次数限制需要一个可替换的缓存后端（内存 / Redis）。
+      依赖的是契约模块，不是任何具体缓存中间件——framework-cache-starter 自身
+      也不允许引入 Redis 之类的依赖。
+    -->
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-cache-starter</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -34,7 +44,7 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <!--
-      Servlet API 由容器（Tomcat）在运行期提供，此处仅编译期需要，故 provided。
+      Servlet API 由内嵌容器（Undertow，见 framework-web-starter）在运行期提供，此处仅编译期需要，故 provided。
       写成 compile 会把一份 servlet-api 打进业务方的 fat jar，与容器自带的冲突。
     -->
     <dependency>
