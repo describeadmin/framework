@@ -7,7 +7,11 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
-## Unreleased
+## 0.2.1 (2026-09-02)
+
+一批不改变兼容承诺的收敛：把 codegen 逐 Controller 内联的取参逻辑上移基类、
+让 codegen 生成物用 Lombok 消除样板、放宽字典端点的权限要求。
+`api/` 包只增不改，`0.2.0` 的接入方直接升级即可。
 
 ### Breaking Changes
 
@@ -15,14 +19,28 @@
 
 ### New Features
 
+- **`framework-mybatis-starter` 的 `api/BaseController` 新增 6 个列表查询取参方法**：
+  `text` / `asInt` / `asLong` / `asDecimal` / `asDate` / `asDateTime`（`protected static`，
+  共用私有 `parseParam`）。语义与 codegen 此前内联的实现一致——空串按未填、解析失败抛
+  `BizException(BAD_REQUEST)`、`asDateTime` 同时接受 `T` 与空格分隔。codegen 0.2.1
+  起生成的 Controller 直接调用继承来的这几个方法，不再逐个内联。属 `api/` 兼容面，
+  仅新增签名。
 - **`archetype` 生成的工程预置 `org.projectlombok:lombok`（`optional`）依赖**。
-  配合 codegen 0.x：生成的 Entity / Controller 改用 `@Getter` / `@Setter` /
+  配合 codegen 0.2.1：生成的 Entity / Controller 改用 `@Getter` / `@Setter` /
   `@RequiredArgsConstructor`。框架自身源码不受影响（仍手写访问器 / 构造器 / Logger），
-  `framework-parent` 的编译链与 `framework-bom` 的仲裁范围都没有变化。
+  `framework-bom` 不仲裁 lombok 版本（由 `spring-boot-dependencies` 仲裁）。
+  详见 `CLAUDE.md` §4.10。
+- **`framework-parent` 不再声明 lombok 依赖，也不再配 `annotationProcessorPaths`**。
+  框架全仓 0 处使用 lombok；注解处理器绑 javac 内部非公开 API，与「任意 JDK ≥ 17
+  都能直接构建框架本身」冲突。直接继承 `framework-parent` 且依赖它捎带 lombok 的
+  业务工程（正常不应如此），需在自己的 `pom.xml` 显式声明。
 
 ### Bug Fixes
 
-- 无
+- **字典 `GET /system/dict/data/type/{dictType}` 端点降为仅需登录**，不再要求
+  `system:dict:list` 权限点。字典项是跨页面共享的枚举数据，要求该权限会逼着每个用到
+  字典下拉框的角色被授予「字典管理」，侧边栏因此多出不该有的管理入口。过滤链的
+  `anyRequest().authenticated()` 已兜底，未登录仍拿不到。
 
 ## 0.2.0 (2026-08-31)
 
