@@ -5,7 +5,6 @@ import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.entity.SysDictData;
 import io.github.describeadmin.system.mapper.SysDictDataMapper;
 import io.github.describeadmin.system.service.SysDictDataService;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,8 +34,14 @@ public class SysDictDataController
         return "system:dict";
     }
 
-    /** 按字典类型取全部启用中的字典项，供前端下拉框使用。权限点复用 list。 */
-    @PreAuthorize("hasAuthority('system:dict:list')")
+    /**
+     * 按字典类型取全部启用中的字典项，供前端下拉框使用。
+     *
+     * <p>仅需登录、不挂具体权限点：字典项是跨页面共享的枚举数据（只返回启用中的项），
+     * 若要求 {@code system:dict:list}，每个用到字典下拉框的角色都得被授予"字典管理"
+     * 权限——侧边栏因此多出不该有的管理入口。过滤链的 {@code anyRequest().authenticated()}
+     * 已兜底，未登录仍拿不到。
+     */
     @GetMapping("/type/{dictType}")
     public Result<List<SysDictData>> byType(@PathVariable String dictType) {
         return Result.ok(service.listByType(dictType));

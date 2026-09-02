@@ -102,6 +102,20 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!--
+      codegen 生成的 Entity / Controller 用 @Getter / @Setter / @RequiredArgsConstructor，
+      少写逐字段的机械样板。版本【不写】—— 由 spring-boot-dependencies 仲裁；
+      <optional>true</optional> 保证它不会传递到依赖本工程的下游。
+      注解处理器由 javac 从 classpath 上的 SPI 描述符自动发现，不需要额外配
+      maven-compiler-plugin 的 annotationProcessorPaths。
+      框架自身源码不用 lombok，这条只服务于生成物。
+    -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <optional>true</optional>
+    </dependency>
   </dependencies>
 
   <build>

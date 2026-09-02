@@ -20,7 +20,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Controller 基类，提供标准 CRUD 端点。
@@ -171,6 +175,70 @@ public abstract class BaseController<S extends BaseService<M, T>,
      */
     protected Wrapper<T> buildListWrapper(Map<String, String> params) {
         return null;
+    }
+
+    /**
+     * 从原始查询参数取字符串值，空串按未填处理。
+     *
+     * <p>前端清空输入框后通常传的是空串而不是不传；若不归一化，
+     * {@code WHERE col = ''} 会一条都查不出。
+     *
+     * <p>本方法与下面几个 {@code asXxx} 供 {@link #buildListWrapper(Map)} 的覆写调用
+     * （codegen 会按 spec 的 {@code query} 字段生成那段覆写）。放在基类而非逐个
+     * Controller 内联：空串语义、解析失败返回 400 —— 是框架替业务方固化的口径，
+     * 应随框架版本统一演进，业务方不必为一处修正重跑生成器。
+     *
+     * @return 去除首尾空白后的值；为 {@code null} 或全空白时返回 {@code null}
+     */
+    protected static String text(Map<String, String> params, String key) {
+        String value = params.get(key);
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /** 取 {@link Integer} 查询参数，空值返回 {@code null}，格式非法返回 400。 */
+    protected static Integer asInt(Map<String, String> params, String key) {
+        return parseParam(params, key, Integer::valueOf);
+    }
+
+    /** 取 {@link Long} 查询参数，空值返回 {@code null}，格式非法返回 400。 */
+    protected static Long asLong(Map<String, String> params, String key) {
+        return parseParam(params, key, Long::valueOf);
+    }
+
+    /** 取 {@link BigDecimal} 查询参数，空值返回 {@code null}，格式非法返回 400。 */
+    protected static BigDecimal asDecimal(Map<String, String> params, String key) {
+        return parseParam(params, key, BigDecimal::new);
+    }
+
+    /** 取 {@link LocalDate} 查询参数（{@code yyyy-MM-dd}），空值返回 {@code null}，格式非法返回 400。 */
+    protected static LocalDate asDate(Map<String, String> params, String key) {
+        return parseParam(params, key, LocalDate::parse);
+    }
+
+    /**
+     * 取 {@link LocalDateTime} 查询参数，空值返回 {@code null}，格式非法返回 400。
+     *
+     * <p>{@code T} 与空格分隔都接受，与 {@code framework-web-starter} 的 JSON 入参「进宽」口径一致。
+     */
+    protected static LocalDateTime asDateTime(Map<String, String> params, String key) {
+        return parseParam(params, key, v -> LocalDateTime.parse(v.replace(' ', 'T')));
+    }
+
+    /**
+     * 解析非字符串查询参数。转换失败必须返回 400 而不是 500——
+     * 「日期填错了」是使用者的输入问题，报服务器内部错误会把排查方向带偏。
+     */
+    private static <V> V parseParam(Map<String, String> params, String key,
+                                    Function<String, V> parser) {
+        String value = text(params, key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return parser.apply(value);
+        } catch (RuntimeException e) {
+            throw new BizException(ResultCode.BAD_REQUEST, "参数格式不正确: " + key + "=" + value);
+        }
     }
 
     @GetMapping("/{id}")

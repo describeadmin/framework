@@ -25,7 +25,7 @@
     生效原理：consumer 以 <scope>import</scope> 引入本 BOM 时，Maven 解析的是本 POM 的
     【有效 POM】，其中已包含从父 POM 继承来的 dependencyManagement。
     同时，import 只取 dependencyManagement，不会带入父 POM 的 <dependencies>
-    （lombok / spring-boot-starter-test），因此继承是安全的。
+    （spring-boot-starter-test），因此继承是安全的。
 
     本文件只需追加框架自身的模块。
   -->
@@ -41,9 +41,12 @@
     生效原理：业务方以 <scope>import</scope> 引入本 BOM 时，Maven 解析的是本 POM 的
     【有效 POM】，其中已包含从父 POM 继承来的全部 dependencyManagement。
     同时 import 只取 dependencyManagement，不会带入父 POM 的 <dependencies>
-    （lombok / spring-boot-starter-test），因此继承是安全的。
+    （spring-boot-starter-test），因此继承是安全的。
 
     在此重复声明只会带来版本漂移风险，故不重复。
     验证方式：mvn -f framework/framework-bom/pom.xml help:effective-pom
+
+    lombok 也【不】在这里仲裁：codegen 生成物需要它，但那份依赖由 archetype 生成的业务
+    pom 自带、版本走 spring-boot-dependencies；框架侧统一不掺和（见 CLAUDE.md 4.1）。
   -->
 </project>

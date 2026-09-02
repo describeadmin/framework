@@ -7,6 +7,23 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
+## Unreleased
+
+### Breaking Changes
+
+- 无
+
+### New Features
+
+- **`archetype` 生成的工程预置 `org.projectlombok:lombok`（`optional`）依赖**。
+  配合 codegen 0.x：生成的 Entity / Controller 改用 `@Getter` / `@Setter` /
+  `@RequiredArgsConstructor`。框架自身源码不受影响（仍手写访问器 / 构造器 / Logger），
+  `framework-parent` 的编译链与 `framework-bom` 的仲裁范围都没有变化。
+
+### Bug Fixes
+
+- 无
+
 ## 0.2.0 (2026-08-31)
 
 补齐一批"缺了不能上生产"的能力：服务端权限点校验、登录失败锁定、在线用户与强制下线，
