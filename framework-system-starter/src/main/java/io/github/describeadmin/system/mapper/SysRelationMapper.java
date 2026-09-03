@@ -26,9 +26,12 @@ public interface SysRelationMapper {
     @Select("SELECT ur.role_id FROM sys_user_role ur WHERE ur.user_id = #{userId}")
     List<Long> selectRoleIdsByUserId(@Param("userId") Long userId);
 
+    // TRIM(...) <> '' 把"权限标识留空"存成的空串一并挡在权限集合之外：空串不是 NULL，
+    // 仅靠 IS NOT NULL 过不掉，会一路流到前端按钮显隐和 TokenAuthenticationFilter
+    // （后者对空串 authority 直接抛异常）。TRIM 与 <> '' 均属 MySQL 5.7 安全子集。
     @Select("SELECT DISTINCT m.perm_code FROM sys_menu m "
             + "JOIN sys_role_menu rm ON rm.menu_id = m.id "
-            + "WHERE m.perm_code IS NOT NULL AND m.deleted = 0 "
+            + "WHERE m.perm_code IS NOT NULL AND TRIM(m.perm_code) <> '' AND m.deleted = 0 "
             + "AND rm.role_id IN (SELECT ur.role_id FROM sys_user_role ur WHERE ur.user_id = #{userId})")
     List<String> selectPermCodesByUserId(@Param("userId") Long userId);
 

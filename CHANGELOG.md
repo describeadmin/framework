@@ -7,6 +7,32 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
+## Unreleased
+
+### Breaking Changes
+
+- 无
+
+### New Features
+
+- 无
+
+### Bug Fixes
+
+- **空的「权限标识」不再打垮整个会话**。菜单管理新增/编辑菜单时「权限标识」留空，
+  会被存成空串 `''`（不是 `NULL`）。该菜单授权给用户后，`TokenAuthenticationFilter`
+  对每个带令牌的请求执行 `new SimpleGrantedAuthority("")`，触发
+  `IllegalArgumentException`，导致该用户的所有已认证请求整体 500——`/api/auth/me`
+  首当其冲，前端表现为登录后立即白屏。三层修复：
+  - `TokenAuthenticationFilter.authoritiesOf` 静默跳过空白角色/权限项，一条脏数据
+    不再决定整个会话可用性；
+  - `SysRelationMapper.selectPermCodesByUserId` 的 SQL 加 `TRIM(m.perm_code) <> ''`，
+    空串权限点不再进入用户权限集合，也不再下发给前端按钮显隐（`TRIM` 与 `<> ''`
+    属 MySQL 5.7 安全子集）；
+  - `SysMenuService.save` / `updateById` 覆写，落库前把空白 `permCode` / `icon`
+    归一为 `NULL`，从写入口消除空串。
+  既有 `''` 脏数据无需迁移，前两层已兜底。
+
 ## 0.2.1 (2026-09-02)
 
 一批不改变兼容承诺的收敛：把 codegen 逐 Controller 内联的取参逻辑上移基类、

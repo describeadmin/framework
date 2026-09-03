@@ -22,6 +22,36 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
         this.relationMapper = relationMapper;
     }
 
+    /**
+     * 落库前把空白 {@code permCode}/{@code icon} 归一为 {@code null}。
+     *
+     * <p>目录、普通菜单可以没有权限标识，图标也可留空。前端表单清空后提交的是空串
+     * 而非 {@code null}，直接写库就得到 {@code ''}——与"未填 = NULL"的语义冲突，
+     * 且空串权限标识会污染用户权限集合。这里在唯一的写入口统一处理，是治本；
+     * {@code SysRelationMapper.selectPermCodesByUserId} 的过滤与
+     * {@code TokenAuthenticationFilter} 的容错是对既有脏数据的兜底。
+     */
+    @Override
+    public boolean save(SysMenu entity) {
+        normalizeBlankToNull(entity);
+        return super.save(entity);
+    }
+
+    @Override
+    public boolean updateById(SysMenu entity) {
+        normalizeBlankToNull(entity);
+        return super.updateById(entity);
+    }
+
+    private static void normalizeBlankToNull(SysMenu menu) {
+        if (menu.getPermCode() != null && menu.getPermCode().isBlank()) {
+            menu.setPermCode(null);
+        }
+        if (menu.getIcon() != null && menu.getIcon().isBlank()) {
+            menu.setIcon(null);
+        }
+    }
+
     /** 全量菜单树（管理端用）。 */
     public List<SysMenu> tree() {
         return toTree(list(new QueryWrapper<SysMenu>().orderByAsc("sort")));

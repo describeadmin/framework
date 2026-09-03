@@ -67,14 +67,25 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
      * <p>角色加 {@code ROLE_} 前缀以适配 {@code hasRole()}，权限点保持原样供
      * {@code hasAuthority("system:user:add")} 使用——这两套在 Spring Security 里是同一个集合，
      * 不加前缀区分会让角色名和权限码互相撞车。
+     *
+     * <p><b>空白项直接跳过</b>：{@link SimpleGrantedAuthority} 的构造函数对空串/空白
+     * 直接抛 {@code IllegalArgumentException}。本方法在<b>每个带令牌的请求</b>上执行，
+     * 一条空 {@code perm_code}（菜单管理里"权限标识"留空存成了空串）就会让该用户的
+     * 所有已认证请求整体 500。授权数据里出现空白项是脏数据，不该由它决定整个会话
+     * 能不能用——这里静默过滤，写入侧（{@code SysMenuService}）与查询侧
+     * （{@code SysRelationMapper.selectPermCodesByUserId}）另有归一与过滤。
      */
     private static List<GrantedAuthority> authoritiesOf(LoginUser user) {
         List<GrantedAuthority> authorities = new ArrayList<>();
         for (String role : user.getRoles()) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+            if (role != null && !role.isBlank()) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+            }
         }
         for (String permission : user.getPermissions()) {
-            authorities.add(new SimpleGrantedAuthority(permission));
+            if (permission != null && !permission.isBlank()) {
+                authorities.add(new SimpleGrantedAuthority(permission));
+            }
         }
         return authorities;
     }
