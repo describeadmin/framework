@@ -1,8 +1,16 @@
 # framework 仓库 CI
 #
 # 本仓库自成体系：只构建与测试 framework 自身，不引用任何其他仓库。
-# 「业务方视角」的验证（BOM 仲裁、双版本集成测试）在 sample-app 仓库的 CI 中进行——
-# 那里才是真实消费者的位置，放在本仓库里验证等于自己给自己发合格证。
+#
+# 三层验证，都在本仓库内完成，不依赖任何外部仓库：
+#   build         —— 编译、字节码版本、无 JDBC 驱动、单元测试
+#   it-matrix     —— framework-it 模块（-Pit），Testcontainers 拉真实 MySQL 5.7 / 8.4，
+#                    验证框架各能力的【运行时】语义（审计填充 / 分页 / 乐观锁 / 认证 SPI /
+#                    系统模块 CRUD / 权限 / 操作日志 …）
+#   archetype-e2e —— 脚手架生成物在 JDK 17 最低版本下可构建、BOM 仲裁生效、中文字节正确
+#
+# it-matrix 替代了原先由独立仓 sample-app 承担的「双版本 MySQL 门禁」
+# （见 docs/MIGRATION_NOTES.md D3）。
 
 name: CI
 
@@ -61,6 +69,32 @@ jobs:
           name: framework-jars
           path: '*/target/*.jar'
           retention-days: 7
+
+  it-matrix:
+    name: 运行时行为门禁（${{ matrix.mysql }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # 两条线都跑完，一次看到全部问题
+      matrix:
+        mysql: ['mysql:5.7', 'mysql:8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # framework-it 只在 -Pit 下挂载，以业务方姿态（只引 starter）消费框架。
+      # Testcontainers 会用 Docker 拉起对应版本的 MySQL。
+      # 分两步：先把核心模块装进本地仓库（不跑测试——单元测试是 build job 的事），
+      # 再单独跑 framework-it，避免每条矩阵腿重复执行核心模块的单元测试。
+      - name: 安装核心模块
+        run: mvn -B -f pom.xml install -DskipTests -Dgpg.skip=true
+
+      - name: 集成测试（${{ matrix.mysql }}）
+        run: mvn -B -f pom.xml -Pit -pl framework-it verify -Dmysql.image=${{ matrix.mysql }}
 
   archetype-e2e:
     name: 脚手架端到端（生成 → JDK 17 构建 → 登录）
