@@ -11,7 +11,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 
 ```xml
 <properties>
-  <describeadmin.version>0.2.0</describeadmin.version>
+  <describeadmin.version>0.2.1</describeadmin.version> <!-- 最新版本以 Maven Central 为准 -->
   <!-- ⚠️ 必须显式声明，见下文「驱动版本」 -->
   <mysql.version>8.2.0</mysql.version>
 </properties>
@@ -35,7 +35,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 > mvn archetype:generate -B \
 >   -DarchetypeGroupId=io.github.describeadmin \
 >   -DarchetypeArtifactId=describeadmin-archetype \
->   -DarchetypeVersion=0.2.0 \
+>   -DarchetypeVersion=0.2.1 \
 >   -DgroupId=com.acme -DartifactId=my-server -Dpackage=com.acme.myserver
 > ```
 >
@@ -53,12 +53,14 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 | `framework-cache-starter` | `CacheProvider` 缓存契约、`LockOperations` 锁契约（`@DistributedLock` 注解 + `UniqueGuard`）与零依赖内存实现 |
 | `framework-mybatis-starter` | `BaseEntity` / `BaseService` / `BaseController` 基类，审计字段、逻辑删除、拦截器链扩展缝、数据权限拦截器 |
 | `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门 / 在线用户管理 + 数据权限 + 字典 / 参数配置 / 操作日志（含建表与种子 SQL） |
+| `framework-storage-starter` | `StorageProvider` 存储契约 + 零依赖本地磁盘实现（S3 实现见 `framework-storage-s3-starter` 插件） |
+| `framework-notify-starter` | `NotifyChannel` 通知契约 + `NotifyDispatcher` + 日志渠道（钉钉等具体渠道见对应插件） |
 | `describeadmin-archetype` | 业务方工程脚手架，与框架同版本发布 |
 
 ## 已完成的后端能力
 
-> 当前版本 **0.2.0**（发布进度见
-> [`docs/PROGRESS.md`](https://github.com/describeadmin/docs/blob/main/PROGRESS.md)）。
+> 已发布 **0.2.1**（`0.2.2` 收尾中，含锁能力）；发布进度见
+> [`docs/PROGRESS.md`](https://github.com/describeadmin/docs/blob/main/PROGRESS.md)。
 > 逐条变更见 [CHANGELOG.md](./CHANGELOG.md)。
 
 **认证与权限**（`framework-security-starter` + `framework-system-starter`）
@@ -119,7 +121,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 **缓存契约**（新模块 `framework-cache-starter`）
 
 - `CacheProvider`：`put` / `get` / `evict` / `increment` 四个方法，默认零依赖内存实现（带容量上限）
-- 集中式实现以插件形式提供——第一个插件 `framework-cache-redis-starter` 已独立成仓（未发布到 npm/Central）
+- 集中式实现以插件形式提供——`framework-cache-redis-starter` 已独立成仓并发布到 Maven Central
 
 **锁与并发防护**（`framework-cache-starter`，引入 Redis 插件后自动升级为分布式锁）
 
@@ -193,13 +195,31 @@ ext 模块内。
 ## 自己构建
 
 ```bash
-mvn clean install                     # 任意 JDK ≥ 17 即可，不需要 toolchains
+mvn clean install                            # 任意 JDK ≥ 17 即可，不需要 toolchains
+mvn -Pit -pl framework-it verify             # 运行时行为门禁（Testcontainers 拉真实 MySQL）
+mvn -Pit -pl framework-it verify -Dmysql.image=mysql:8.4   # 切另一条线
 mvn clean verify -Prelease -Dgpg.skip=true   # 验证发布产物齐备
 ```
 
 构建 JDK 只要求 **≥ 17**（`maven-enforcer-plugin` 的 `requireJavaVersion` 会拦下更低的），
 用 17 / 21 / 25 都行——`maven.compiler.release=17` 已锁定产物字节码版本。
 本仓不再使用 `maven-toolchains-plugin`，理由见 `develop_plan.md` 2.2.2「第八轮修订」。
+
+`framework-it` 是**不发布**的集成测试模块，只在 `-Pit` profile 里挂载——默认 reactor
+与 `-Prelease` 都不含它。它以业务方姿态（只引 starter）驱动一个最小 Spring Boot 应用，
+用 Testcontainers 拉真实 MySQL 5.7 / 8.4 验证框架各能力的运行时语义。CI 的
+`it-matrix` job 就跑它；`archetype-e2e` job 另外验证脚手架生成物在 JDK 17 下可构建。
+
+## 相关文档
+
+编码规范、设计方案、版本基线、发布手册都在 **`describeadmin/docs`** 仓——
+做框架开发时把本仓与 `docs` 仓并列检出：
+
+- `docs/CLAUDE.md` —— 编码规范（唯一副本，本仓不再放）
+- `docs/develop_plan.md` —— 设计方案与取舍
+- `docs/VERSION_BASELINE.md` —— 已核验的版本事实
+- `docs/PROGRESS.md` —— 当前进度与下一步
+- `docs/RELEASE.md` —— 发布步骤（发到 Central 不可撤回）
 
 ## 变更记录
 
