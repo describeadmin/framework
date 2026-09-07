@@ -6,13 +6,15 @@
 mvn archetype:generate -B \
   -DarchetypeGroupId=io.github.describeadmin \
   -DarchetypeArtifactId=describeadmin-archetype \
-  -DarchetypeVersion=0.1.1 \
+  -DarchetypeVersion=0.2.1 \
   -DgroupId=com.acme \
   -DartifactId=order-server \
   -Dpackage=com.acme.order
 ```
 
-去掉 `-B` 进入交互模式，会逐项询问 `archetype-metadata.xml` 里声明的参数。
+`archetypeVersion` 用最新的已发布版本（以 Maven Central 为准）——archetype 与框架同号发布，
+它生成的工程引用的就是这个框架版本。去掉 `-B` 进入交互模式，会逐项询问
+`archetype-metadata.xml` 里声明的参数。
 
 ## 它交付的是什么
 
