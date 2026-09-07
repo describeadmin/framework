@@ -39,7 +39,7 @@ import org.springframework.context.annotation.ComponentScan;
  * 内置登录方式会被静默跳过，表现为运行时报「不支持的登录方式: password」。
  *
  * <p>这是跨 starter 使用 {@code @ConditionalOnBean} 的典型陷阱：编译期毫无征兆，
- * 只有真实启动上下文才暴露。本项目已由 sample-app 的集成测试捕获过一次。
+ * 只有真实启动上下文才暴露。本项目已由 framework-it 的集成测试捕获过一次。
  */
 @AutoConfiguration(before = FrameworkSecurityAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "describeadmin.system", name = "enabled",

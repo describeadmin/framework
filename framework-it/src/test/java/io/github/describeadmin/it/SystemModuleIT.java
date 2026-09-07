@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 验证系统管理能力由框架提供、业务方零实现。
  *
  * <p>本类注入的全部是 {@code io.github.describeadmin.system.*} 下的 Bean——
- * sample-app 没有写任何一行 RBAC 代码，这些能力全部来自
+ * framework-it 没有写任何一行 RBAC 代码，这些能力全部来自
  * framework-system-starter 的自动配置。
  *
  * <p>这正是 develop_plan.md 目标 #5 的落点：框架修了 RBAC 的问题，

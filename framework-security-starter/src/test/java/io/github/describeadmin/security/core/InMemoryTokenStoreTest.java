@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * {@link InMemoryTokenStore} 在线会话枚举的单元测试。
  *
- * <p>签发/解析/吊销的行为已由 sample-app 的 {@code AuthFlowIT} 端到端覆盖，
+ * <p>签发/解析/吊销的行为已由 framework-it 的 {@code AuthFlowIT} 端到端覆盖，
  * 这里只补新增的 {@code listActive}。
  */
 @DisplayName("内存令牌存储：在线会话")
