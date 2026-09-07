@@ -50,7 +50,7 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 | `framework-common` | `Result<T>` 统一响应结构、全局异常处理器、`PermissionChecker` / `FrameworkVersion` 契约 |
 | `framework-web-starter` | traceId 贯穿请求与日志 |
 | `framework-security-starter` | 不透明令牌认证、`AuthProvider` / `TokenStore` SPI、服务端权限点校验、登录失败锁定、在线会话枚举 |
-| `framework-cache-starter` | `CacheProvider` 缓存契约与零依赖内存实现 |
+| `framework-cache-starter` | `CacheProvider` 缓存契约、`LockOperations` 锁契约（`@DistributedLock` 注解 + `UniqueGuard`）与零依赖内存实现 |
 | `framework-mybatis-starter` | `BaseEntity` / `BaseService` / `BaseController` 基类，审计字段、逻辑删除、拦截器链扩展缝、数据权限拦截器 |
 | `framework-system-starter` | 开箱可用的用户 / 角色 / 菜单 / 部门 / 在线用户管理 + 数据权限 + 字典 / 参数配置 / 操作日志（含建表与种子 SQL） |
 | `describeadmin-archetype` | 业务方工程脚手架，与框架同版本发布 |
@@ -120,6 +120,24 @@ describeadmin 的后端框架核心。发布到 Maven Central，groupId `io.gith
 
 - `CacheProvider`：`put` / `get` / `evict` / `increment` 四个方法，默认零依赖内存实现（带容量上限）
 - 集中式实现以插件形式提供——第一个插件 `framework-cache-redis-starter` 已独立成仓（未发布到 npm/Central）
+
+**锁与并发防护**（`framework-cache-starter`，引入 Redis 插件后自动升级为分布式锁）
+
+- `LockOperations` SPI：`tryLock`（快速失败）/ `lock`（限时等待），返回持有
+  随机 token 的 `LockHandle`（`AutoCloseable`，Lua/条件删除保证不误删他人的锁）；
+  默认进程内实现，多实例部署需引入 `framework-cache-redis-starter`
+- `@DistributedLock(key, ttl, waitTimeout, strategy)` 注解：key 支持 SpEL、缺省
+  `全限定类名.方法名`；策略 `WAIT`（限时等待）或 `FAIL_FAST`（立即报错），未指定时跟随
+  全局配置 `describeadmin.lock.default-strategy`；切面排在事务拦截器之前，
+  保证 锁 → 事务 → 提交 → 释放锁 的顺序
+- **定时任务防多机并发**：`@DistributedLock` 标在 `@Scheduled` 方法上即可，
+  多实例下只有抢到锁的节点执行本轮任务；等待策略（最终生效为 WAIT）会被
+  启动期校验直接拒绝——那会让其他节点在锁释放后把任务再执行一遍
+- `UniqueGuard`：键级唯一性保护组件，把"check 唯一 → 写入"串行化——弥补
+  逻辑删除下不建唯一索引、并发重复插入的既有漏洞；系统模块的用户名/手机号/
+  邮箱/参数键/字典类型/角色标识校验已全部接入
+- 配置项 `describeadmin.lock.{default-strategy, key-prefix}`；启动日志打印
+  当前生效的锁实现（内存 / Redis）
 
 **持久层扩展缝**（`framework-mybatis-starter`）
 

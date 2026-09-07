@@ -18,14 +18,35 @@
   <!--
     ⚠️ 本模块【不得】引入任何缓存中间件依赖（Redis、Caffeine 等）。
 
-    它的职责只有两条：定义 CacheProvider 契约，以及提供一个不引入任何第三方依赖的
-    内存兜底实现，使框架"开箱即用"。具体的集中式实现走插件
-    （framework-cache-redis-starter），由业务方按需引入。
+    它的职责有三条：定义 CacheProvider / LockOperations 契约，提供不引入任何
+    第三方依赖的内存兜底实现，以及 @DistributedLock 注解切面（@Order 在事务之前）。
+    具体的集中式实现走插件（framework-cache-redis-starter），由业务方按需引入。
 
     这条约束由父 POM 的 maven-enforcer-plugin 在构建期强制。
   -->
 
   <dependencies>
+    <!--
+      BizException / ResultCode：锁的 fail-close 语义、UniqueGuard 与切面的
+      "操作冲突"报错都走统一业务异常。common 是全框架最底层的模块，
+      引它不会带来任何传递负担。
+    -->
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-common</artifactId>
+    </dependency>
+
+    <!--
+      LockAspect（@Aspect）所需。轻量级（spring-aop + aspectjweaver），
+      不在父 POM enforce-core-thin 的封禁清单里——与 framework-system-starter
+      引入它的理由相同（OperLogAspect）。若做成 optional + @ConditionalOnClass，
+      业务方没引 AOP 时注解会静默失效，那比多两个小 jar 更糟。
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
     <!--
       只依赖 spring-boot-autoconfigure，不依赖 spring-boot-starter-web：
       定时任务、消息消费者这类非 Web 的业务方同样可能需要缓存。

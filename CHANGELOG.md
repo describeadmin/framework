@@ -7,22 +7,52 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
-## 0.2.2 (2026-09-03)
+## 0.2.2 (2026-09-07)
 
 `codegen` 已于 2026-09-03 单独发过 `0.2.2`（当时 `framework` 无改动、破例不同号）。
-本次 `framework` 带上一个会崩溃的 bug 修复，版本追平到 `0.2.2`——与 `codegen 0.2.2`
-生成物逐字节兼容，`api/` 包只增不改，`0.2.x` 接入方直接升级即可。
+本次 `framework` 在 0.2.2 里叠加两块内容：一个会崩溃的 bug 修复与整套锁能力——
+`api/` 包只增不改（新增 `LockOperations` / `LockHandle` / `DistributedLock` /
+`LockStrategy`），`0.2.x` 接入方直接升级即可。
 
 ### Breaking Changes
 
-- 无
+- 无（`SysRoleService.save/updateById` 现在会拒绝重复 `roleCode`——严格说这是
+  新增校验而非破坏：此前连校验都没有，重复角色标识能正常落库，属于漏洞修复）
 
 ### New Features
 
-- 无
+- **`LockOperations` 锁 SPI**（`framework-cache-starter`）：`tryLock`（快速失败）/
+  `lock`（限时等待），返回持有随机 token 的 `LockHandle`（`AutoCloseable`、幂等、
+  条件删除/Lua compare-and-delete 保证 TTL 过期后不误删他人的锁）。默认零依赖
+  进程内实现；引入 `framework-cache-redis-starter` 后自动替换为 Redis 分布式锁
+  （`SET NX PX` + Lua 解锁），上层代码不变。加锁存储故障时 fail-close（抛异常
+  而非放行），解锁失败 fail-silent（锁由 TTL 兜底）。刻意不做可重入与续期。
+- **`@DistributedLock` 注解**：标在接口方法上防并发（key 支持 SpEL，缺省
+  `全限定类名.方法名`），或标在 `@Scheduled` 方法上防多机并发。策略 `WAIT`/`FAIL_FAST`，
+  未显式指定时跟随全局配置 `describeadmin.lock.default-strategy`（默认 WAIT）。
+  切面 `@Order(1000)` 排在事务拦截器之前，保证 锁 → 事务 → 提交 → 释放锁。
+  **启动期校验**：`@Scheduled` 方法上最终生效策略为 WAIT 时直接拒绝启动——
+  等待策略会让其他节点在锁释放后把同一轮任务再执行一遍。
+- **`UniqueGuard`**：键级唯一性保护组件，把"check 唯一 → 写入"串行化。
+  弥补逻辑删除下不建唯一索引的既有权衡：框架表此前所有唯一性校验在并发下
+  形同虚设（两个并发请求同时通过检查、各插一条）。
+- **配置项** `describeadmin.lock.{default-strategy, key-prefix}`：默认策略与
+  键前缀交给部署方决定；非法取值（strategy 配成 DEFAULT、前缀为空）启动期拒绝。
+  启动日志打印当前生效的锁实现（内存 / Redis）。
+- `framework-cache-redis-starter` 0.2.2：新增 `RedisLockOperations`，锁键前缀
+  取框架的 `describeadmin.lock.key-prefix`（不叠加插件自己的缓存前缀），
+  内存/Redis 两实现产出完全相同的键名，替换实现不改变锁语义。
+  `REQUIRED_FRAMEWORK_VERSION` 上调至 `0.2.2`（锁 SPI 的引入版本）。
 
 ### Bug Fixes
 
+- **系统模块并发唯一性漏洞（存量修复）**：`SysUserService`（用户名/手机号/邮箱，
+  create + update + 自助改资料）、`SysConfigService`（configKey）、
+  `SysDictTypeService`（dictType）的唯一性校验全部接入 `UniqueGuard`——
+  此前这些校验在并发下形同虚设。带事务的写路径（createUser）改为
+  `TransactionTemplate` 编程式事务以保证锁包住事务提交。
+- **`SysRoleService` 补上完全缺失的 `roleCode` 唯一性校验**：此前重复角色标识
+  可正常落库，无任何拦截。角色名（展示字段）刻意允许重名，与登录凭证不同。
 - **空的「权限标识」不再打垮整个会话**。菜单管理新增/编辑菜单时「权限标识」留空，
   会被存成空串 `''`（不是 `NULL`）。该菜单授权给用户后，`TokenAuthenticationFilter`
   对每个带令牌的请求执行 `new SimpleGrantedAuthority("")`，触发

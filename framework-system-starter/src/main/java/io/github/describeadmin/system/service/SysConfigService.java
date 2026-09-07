@@ -2,6 +2,7 @@ package io.github.describeadmin.system.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.cache.api.CacheProvider;
+import io.github.describeadmin.cache.api.UniqueGuard;
 import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseService;
@@ -24,7 +25,8 @@ import java.util.Optional;
  *
  * <p>{@code configKey} 唯一性在应用层校验，而非数据库唯一索引——逻辑删除下建唯一索引
  * 会导致删除后无法复用同名参数键，理由同 {@code SysUserService.username}（见
- * schema-rbac.sql 对应注释）。
+ * schema-rbac.sql 对应注释）。<b>并发唯一性由 {@link UniqueGuard} 的键级锁保证</b>：
+ * 没有锁时两个并发请求会同时通过校验、各插一条。
  */
 @Service
 public class SysConfigService extends BaseService<SysConfigMapper, SysConfig> {
@@ -34,10 +36,13 @@ public class SysConfigService extends BaseService<SysConfigMapper, SysConfig> {
 
     private final CacheProvider cacheProvider;
     private final FrameworkSystemProperties properties;
+    private final UniqueGuard uniqueGuard;
 
-    public SysConfigService(CacheProvider cacheProvider, FrameworkSystemProperties properties) {
+    public SysConfigService(CacheProvider cacheProvider, FrameworkSystemProperties properties,
+                            UniqueGuard uniqueGuard) {
         this.cacheProvider = cacheProvider;
         this.properties = properties;
+        this.uniqueGuard = uniqueGuard;
     }
 
     public String getValue(String configKey) {
@@ -78,27 +83,31 @@ public class SysConfigService extends BaseService<SysConfigMapper, SysConfig> {
     /** 内置标记只能来自种子数据，API 新增的参数一律按自定义处理，忽略调用方传入的值。 */
     @Override
     public boolean save(SysConfig entity) {
-        assertConfigKeyAvailable(null, entity.getConfigKey());
-        entity.setConfigType(null);
-        boolean result = super.save(entity);
-        evictCache(entity.getConfigKey());
-        return result;
+        return uniqueGuard.execute("sys:config:key", entity.getConfigKey(), () -> {
+            assertConfigKeyAvailable(null, entity.getConfigKey());
+            entity.setConfigType(null);
+            boolean result = super.save(entity);
+            evictCache(entity.getConfigKey());
+            return result;
+        });
     }
 
     @Override
     public boolean updateById(SysConfig entity) {
-        if (entity.getConfigKey() != null) {
-            assertConfigKeyAvailable(entity.getId(), entity.getConfigKey());
-        }
-        SysConfig existing = getById(entity.getId());
-        boolean result = super.updateById(entity);
-        if (existing != null) {
-            evictCache(existing.getConfigKey());
-        }
-        if (entity.getConfigKey() != null) {
-            evictCache(entity.getConfigKey());
-        }
-        return result;
+        return uniqueGuard.execute("sys:config:key", entity.getConfigKey(), () -> {
+            if (entity.getConfigKey() != null) {
+                assertConfigKeyAvailable(entity.getId(), entity.getConfigKey());
+            }
+            SysConfig existing = getById(entity.getId());
+            boolean result = super.updateById(entity);
+            if (existing != null) {
+                evictCache(existing.getConfigKey());
+            }
+            if (entity.getConfigKey() != null) {
+                evictCache(entity.getConfigKey());
+            }
+            return result;
+        });
     }
 
     /** 内置参数（{@code configType} = "Y"）不允许删除，防止业主误删框架依赖的默认参数。 */

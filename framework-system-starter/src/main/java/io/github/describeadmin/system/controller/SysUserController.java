@@ -84,15 +84,16 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
      * <p>把 {@code status} 显式改为禁用值（0）时顺带吊销该用户的全部令牌——否则被禁用的账号
      * 已登录的会话仍然有效，要等令牌自然过期才失效，与"禁用立即生效"的直觉预期不符
      * （见 {@link TokenStore#revokeAllOf(Long)} 的 javadoc）。改其他字段不触发吊销。
+     *
+     * <p>校验与写入合并成 {@link SysUserService#updateWithUniqueCheck(Long, SysUser)} 一次调用：
+     * 二者必须在同一把键级锁内，controller 里"先校验、再写入"两次调用起不到并发保护作用。
      */
     @Override
     @OperLog(module = "system:user", description = "更新用户")
     @PreAuthorize("hasAuthority('system:user:edit')")
     @PutMapping("/{id}")
     public Result<SysUser> update(@PathVariable Long id, @RequestBody SysUser entity) {
-        service.assertMobileEmailAvailable(id, entity.getMobile(), entity.getEmail());
-        entity.setId(id);
-        if (!service.updateById(entity)) {
+        if (!service.updateWithUniqueCheck(id, entity)) {
             throw new BizException(ResultCode.NOT_FOUND, "记录不存在或已被他人修改: " + id);
         }
         if (entity.getStatus() != null && entity.getStatus() == 0) {
