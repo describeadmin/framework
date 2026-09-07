@@ -269,7 +269,7 @@
             测试 JVM 必须显式指定 UTF-8。默认取平台编码，中文 Windows 上是 GBK，
             断言里的中文会与被测代码里的中文对不上，而失败信息本身也是乱码，
             排查方向会完全跑偏。见 CLAUDE.md 3.6 与 VERSION_BASELINE.md 发现 ④⑤。
-            sample-app 早已配了这一行，框架侧因为此前没有任何测试而一直空缺。
+            framework-it 与各插件仓的 surefire 也配了同样一行。
           -->
           <argLine>-Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8</argLine>
         </configuration>

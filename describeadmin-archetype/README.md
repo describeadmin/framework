@@ -30,7 +30,7 @@ mvn archetype:generate -B \
 
 ## 为什么不生成 toolchains 配置
 
-`sample-app` 的 POM 里有 `maven-toolchains-plugin`，本脚手架**刻意不带**。
+早期的样板工程 POM 里配过 `maven-toolchains-plugin`，本脚手架**刻意不带**。
 
 框架自身构建也只要求 JDK 17+（同样不再用 toolchains，见 `develop_plan.md` 2.2.2「第八轮修订」）。
 业务方的约束同样只有一条：**Maven 进程自身跑在 JDK 17+**
