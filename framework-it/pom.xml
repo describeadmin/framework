@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    框架运行时行为的集成测试门禁。
+
+    ⚠️ 本模块【不发布】，也【不进默认 reactor】——只在父 POM 的 `it` profile 里挂载：
+        mvn -f framework/pom.xml verify -Pit                     # 默认 mysql:5.7
+        mvn -f framework/pom.xml verify -Pit -Dmysql.image=mysql:8.4
+
+    它替代了原先由独立仓 sample-app 承担的「双版本 MySQL 运行时门禁」职责
+    （见 docs/MIGRATION_NOTES.md D3）：以真实业务方姿态（继承 framework-parent 仅为
+    复用构建配置，依赖仍走 starter）驱动一个最小 Spring Boot 应用，用 Testcontainers
+    拉起真实 MySQL，验证审计填充 / 分页 / 逻辑删除 / 乐观锁 / 中文往返 / 认证 SPI /
+    系统模块 CRUD / 权限与数据权限 / 操作日志 / 在线会话 / 登录锁定 / 口令策略 /
+    强制改密 等【运行时】行为。
+
+    与 framework CI 的 archetype-e2e job 的分工：archetype-e2e 验证「脚手架生成物在
+    JDK 17 最低版本下可构建、BOM 仲裁生效、中文字节正确」；本模块验证「框架各能力的
+    运行时语义」。两者互补，都不依赖任何外部仓库。
+  -->
+
+  <parent>
+    <groupId>io.github.describeadmin</groupId>
+    <artifactId>framework-parent</artifactId>
+    <version>0.2.2</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>framework-it</artifactId>
+  <name>describeadmin :: framework-it</name>
+  <description>框架运行时行为集成测试门禁（不发布）</description>
+
+  <properties>
+    <!-- 双版本门禁开关：-Dmysql.image=mysql:8.4；默认取最严格的 5.7 -->
+    <mysql.image>mysql:5.7</mysql.image>
+    <!-- 不发布 -->
+    <maven.deploy.skip>true</maven.deploy.skip>
+    <gpg.skip>true</gpg.skip>
+    <!--
+      本模块需要 JDBC 驱动（Testcontainers）并运行一个 Spring Boot 应用，
+      与父 POM 的 enforce-rules（禁 JDBC 驱动）冲突。它不发布、不进核心制品，
+      整体跳过 enforcer 即可。
+    -->
+    <enforcer.skip>true</enforcer.skip>
+  </properties>
+
+  <dependencies>
+    <!-- 以业务方姿态消费框架：只引 starter，版本由父 POM 的 dependencyManagement 仲裁 -->
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-web-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-security-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-mybatis-starter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-system-starter</artifactId>
+    </dependency>
+
+    <!-- JDBC 驱动：业务方责任。这里用 5.7-safe 的默认值（父 POM 仲裁 8.2.0） -->
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>mysql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- 集成测试以 *IT 结尾，且要随 test 阶段一起跑（它们就是门禁本体） -->
+          <includes>
+            <include>**/*Test.java</include>
+            <include>**/*Tests.java</include>
+            <include>**/*IT.java</include>
+          </includes>
+          <argLine>-Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8</argLine>
+          <systemPropertyVariables>
+            <mysql.image>${mysql.image}</mysql.image>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

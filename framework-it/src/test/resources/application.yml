@@ -1,0 +1,36 @@
+# framework-it 集成测试配置。
+# 数据源由 AbstractMySqlIntegrationTest 的 @DynamicPropertySource 注入（Testcontainers）。
+
+spring:
+  application:
+    name: framework-it
+  main:
+    banner-mode: off
+
+describeadmin:
+  web:
+    trace:
+      enabled: true
+  mybatis:
+    # 不硬编码在代码里；换达梦/金仓/OceanBase 时改这里即可
+    db-type: MYSQL
+    max-limit: 500
+  system:
+    # 库里没有用户时创建管理员 admin，随机强口令写到 target 下的文件
+    # （具体路径见 AbstractMySqlIntegrationTest.DEV_SEED_PASSWORD_FILE）
+    dev-seed:
+      enabled: true
+
+mybatis-plus:
+  global-config:
+    db-config:
+      id-type: AUTO
+      logic-delete-field: deleted
+      logic-not-delete-value: 0
+      logic-delete-value: 1
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    io.github.describeadmin: INFO

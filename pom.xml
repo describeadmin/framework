@@ -403,6 +403,20 @@
 
   <profiles>
     <!--
+      集成测试门禁。framework-it 只在本 profile 里挂载 —— 默认 reactor 与 release
+      都不含它，因此它不会被构建、更不会被 deploy。
+        mvn -f framework/pom.xml verify -Pit                     # 默认 mysql:5.7
+        mvn -f framework/pom.xml verify -Pit -Dmysql.image=mysql:8.4
+      它替代原独立仓 sample-app 的「双版本 MySQL 运行时门禁」职责（docs/MIGRATION_NOTES.md D3）。
+    -->
+    <profile>
+      <id>it</id>
+      <modules>
+        <module>framework-it</module>
+      </modules>
+    </profile>
+
+    <!--
       发布 profile。需要：
         1. Central Portal User Token  → settings.xml 的 <server id="central">
         2. GPG 密钥                    → gpg.keyname / 或默认密钥

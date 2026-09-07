@@ -1,0 +1,427 @@
+package io.github.describeadmin.it;
+
+import io.github.describeadmin.system.entity.SysDept;
+import io.github.describeadmin.system.entity.SysMenu;
+import io.github.describeadmin.system.entity.SysRole;
+import io.github.describeadmin.system.entity.SysUser;
+import io.github.describeadmin.system.service.SysDeptService;
+import io.github.describeadmin.system.service.SysMenuService;
+import io.github.describeadmin.system.service.SysRoleService;
+import io.github.describeadmin.system.service.SysUserService;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * 验证系统管理能力由框架提供、业务方零实现。
+ *
+ * <p>本类注入的全部是 {@code io.github.describeadmin.system.*} 下的 Bean——
+ * sample-app 没有写任何一行 RBAC 代码，这些能力全部来自
+ * framework-system-starter 的自动配置。
+ *
+ * <p>这正是 develop_plan.md 目标 #5 的落点：框架修了 RBAC 的问题，
+ * 业务方升个版本就拿到了；若让每个业务方自己实现，框架永远修不了他们的代码。
+ */
+@DisplayName("系统管理（框架提供）")
+class SystemModuleIT extends AbstractMySqlIntegrationTest {
+
+    @Autowired SysUserService userService;
+    @Autowired SysRoleService roleService;
+    @Autowired SysMenuService menuService;
+    @Autowired SysDeptService deptService;
+    @Autowired PasswordEncoder passwordEncoder;
+
+    @Test
+    @DisplayName("系统管理的 Service 全部由框架自动装配，业务方无需声明")
+    void servicesComeFromFramework() {
+        for (Object bean : List.of(userService, roleService, menuService, deptService)) {
+            assertThat(bean.getClass().getName())
+                    .as("应来自框架包，而非业务方包")
+                    .startsWith("io.github.describeadmin.system.");
+        }
+    }
+
+    @Test
+    @DisplayName("种子数据完整：管理员、角色、菜单、部门")
+    void seedData() {
+        SysUser admin = userService.findByUsername("admin");
+        assertThat(admin).isNotNull();
+        // 值断言而非计数断言 —— 字符集问题只有比对具体值才查得出（CLAUDE.md 3.6）
+        assertThat(admin.getNickname()).isEqualTo("超级管理员");
+        assertThat(admin.getStatus()).isEqualTo(1);
+
+        assertThat(roleService.list()).extracting(SysRole::getRoleCode).contains("ADMIN");
+        assertThat(deptService.list()).extracting(SysDept::getDeptName).contains("总部");
+    }
+
+    @Test
+    @DisplayName("创建用户时密码被哈希，不会明文落库")
+    void createUserHashesPassword() {
+        SysUser u = new SysUser();
+        u.setUsername("zhangsan");
+        u.setNickname("张三");
+
+        SysUser created = userService.createUser(u, "P@ssw0rd-123", List.of());
+
+        SysUser fromDb = userService.getById(created.getId());
+        assertThat(fromDb.getPassword())
+                .as("必须是哈希，不能是明文")
+                .isNotEqualTo("P@ssw0rd-123")
+                .startsWith("$2a$");
+        assertThat(passwordEncoder.matches("P@ssw0rd-123", fromDb.getPassword())).isTrue();
+    }
+
+    @Test
+    @DisplayName("用户名重复被拒绝（应用层校验，非唯一索引）")
+    void duplicateUsernameRejected() {
+        SysUser u = new SysUser();
+        u.setUsername("admin");
+        assertThatThrownBy(() -> userService.createUser(u, "whatever", List.of()))
+                .hasMessageContaining("用户名已存在");
+    }
+
+    @Test
+    @DisplayName("创建用户时手机号/邮箱一并落库")
+    void createUserPersistsMobileAndEmail() {
+        SysUser u = new SysUser();
+        u.setUsername("mobile-email-user");
+        u.setMobile("13800000001");
+        u.setEmail("mobile-email-user@example.com");
+
+        SysUser created = userService.createUser(u, "pwd-123456", List.of());
+
+        SysUser fromDb = userService.getById(created.getId());
+        assertThat(fromDb.getMobile()).isEqualTo("13800000001");
+        assertThat(fromDb.getEmail()).isEqualTo("mobile-email-user@example.com");
+    }
+
+    @Test
+    @DisplayName("手机号重复被拒绝（应用层校验，非唯一索引）")
+    void duplicateMobileRejected() {
+        SysUser first = new SysUser();
+        first.setUsername("mobile-owner");
+        first.setMobile("13800000002");
+        userService.createUser(first, "pwd-123456", List.of());
+
+        SysUser second = new SysUser();
+        second.setUsername("mobile-challenger");
+        second.setMobile("13800000002");
+        assertThatThrownBy(() -> userService.createUser(second, "pwd-123456", List.of()))
+                .hasMessageContaining("手机号已被占用");
+    }
+
+    @Test
+    @DisplayName("邮箱重复被拒绝（应用层校验，非唯一索引）")
+    void duplicateEmailRejected() {
+        SysUser first = new SysUser();
+        first.setUsername("email-owner");
+        first.setEmail("shared@example.com");
+        userService.createUser(first, "pwd-123456", List.of());
+
+        SysUser second = new SysUser();
+        second.setUsername("email-challenger");
+        second.setEmail("shared@example.com");
+        assertThatThrownBy(() -> userService.createUser(second, "pwd-123456", List.of()))
+                .hasMessageContaining("邮箱已被占用");
+    }
+
+    @Test
+    @DisplayName("手机号/邮箱唯一性校验排除自己：改别的字段但手机号没变不应误判为冲突")
+    void mobileEmailUniqueCheckExcludesSelf() {
+        SysUser other = new SysUser();
+        other.setUsername("self-check-other");
+        other.setMobile("13800000004");
+        userService.createUser(other, "pwd-123456", List.of());
+
+        SysUser u = new SysUser();
+        u.setUsername("self-check-user");
+        u.setMobile("13800000003");
+        u.setEmail("self-check@example.com");
+        SysUser created = userService.createUser(u, "pwd-123456", List.of());
+
+        // 传入自己的 id，同样的手机号/邮箱不应被判定为"被占用"
+        userService.assertMobileEmailAvailable(created.getId(), "13800000003", "self-check@example.com");
+
+        // 换一个真实存在于别人身上的手机号，才应该被拒绝
+        assertThatThrownBy(() ->
+                userService.assertMobileEmailAvailable(created.getId(), "13800000004", null))
+                .hasMessageContaining("手机号已被占用");
+    }
+
+    @Test
+    @DisplayName("用户名禁止修改：编辑请求带任何 username 值都不落库（含空串）")
+    void usernameIsImmutableOnUpdate() {
+        SysUser u = new SysUser();
+        u.setUsername("immutable-name");
+        u.setNickname("原昵称");
+        SysUser created = userService.createUser(u, "Pwd-123456!", List.of());
+
+        // 前端表单出意外，把别的用户名塞进编辑请求体
+        SysUser renamed = new SysUser();
+        renamed.setNickname("改过的昵称");
+        renamed.setUsername("hacked-by-frontend");
+        userService.updateWithUniqueCheck(created.getId(), renamed);
+
+        SysUser afterRename = userService.getById(created.getId());
+        assertThat(afterRename.getUsername())
+                .as("用户名是账号标识，任何编辑路径都不该能改它")
+                .isEqualTo("immutable-name");
+        assertThat(afterRename.getNickname()).as("同一请求里的其他字段照常更新").isEqualTo("改过的昵称");
+
+        // 空串：非 null，会绕过 MyBatis-Plus 默认的 NOT_NULL 更新策略
+        SysUser blanked = new SysUser();
+        blanked.setNickname("再改一次");
+        blanked.setUsername("");
+        userService.updateWithUniqueCheck(created.getId(), blanked);
+
+        assertThat(userService.getById(created.getId()).getUsername())
+                .as("空串落库会让这个账号再也登录不上，且不会有任何报错")
+                .isEqualTo("immutable-name");
+
+        // null：MyBatis-Plus 全局 updateStrategy 默认 NOT_NULL，本就不该写库
+        SysUser nulled = new SysUser();
+        nulled.setNickname("第三次");
+        nulled.setUsername(null);
+        userService.updateWithUniqueCheck(created.getId(), nulled);
+
+        assertThat(userService.getById(created.getId()).getUsername()).isEqualTo("immutable-name");
+        // 用户名没变 = 原账号仍然查得到，登录链路不受影响
+        assertThat(userService.findByUsername("immutable-name")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("重置密码后旧密码失效、新密码生效")
+    void resetPassword() {
+        SysUser u = new SysUser();
+        u.setUsername("lisi");
+        // "old-password"/"new-password" 本身只有 2 类字符（小写字母+连字符），
+        // 不满足密码策略"至少 3 类"的要求（连字符算 1 类特殊字符，但缺数字），补一位数字即可合规
+        SysUser created = userService.createUser(u, "old-password-1", List.of());
+
+        userService.resetPassword(created.getId(), "new-password-1");
+
+        String hash = userService.getById(created.getId()).getPassword();
+        assertThat(passwordEncoder.matches("old-password-1", hash)).isFalse();
+        assertThat(passwordEncoder.matches("new-password-1", hash)).isTrue();
+    }
+
+    @Test
+    @DisplayName("密码复杂度策略：createUser/resetPassword/changeOwnPassword 三处入口全部生效")
+    void passwordPolicyAppliesToAllThreeEntryPoints() {
+        // createUser：只有小写字母一类，长度也不够
+        SysUser weak = new SysUser();
+        weak.setUsername("weak-pwd-create");
+        assertThatThrownBy(() -> userService.createUser(weak, "abcdefg", List.of()))
+                .hasMessageContaining("密码");
+
+        // resetPassword（管理员改别人）：只有小写字母+数字两类
+        SysUser u = new SysUser();
+        u.setUsername("weak-pwd-reset");
+        SysUser created = userService.createUser(u, "Pwd-123456!", List.of());
+        assertThatThrownBy(() -> userService.resetPassword(created.getId(), "abcdefg1"))
+                .hasMessageContaining("密码需同时包含");
+
+        // changeOwnPassword（自助改密）：新密码同样受策略约束
+        assertThatThrownBy(() -> userService.changeOwnPassword(created.getId(), "Pwd-123456!", "abcdefg1"))
+                .hasMessageContaining("密码需同时包含");
+
+        // 旧密码错误应该在密码策略校验之前就被拦下：即使 newPassword 本身不合规（只有2类字符），
+        // 拿到的也应该是"原密码不正确"，而不是密码策略的报错——否则说明校验顺序反了
+        assertThatThrownBy(() ->
+                userService.changeOwnPassword(created.getId(), "wrong-old-pwd", "abcdefg1"))
+                .as("旧密码错误应该在密码策略之前就被拦下")
+                .hasMessageContaining("原密码不正确");
+        assertThatThrownBy(() -> userService.changeOwnPassword(created.getId(), "Pwd-123456!", "Pwd-123456!"))
+                .hasMessageContaining("新密码不能与旧密码相同");
+    }
+
+    @Test
+    @DisplayName("自助改资料：更新姓名/手机号/邮箱，且手机号唯一性校验同样生效")
+    void updateOwnProfileUpdatesNicknameMobileEmail() {
+        SysUser u = new SysUser();
+        u.setUsername("profile-self-user");
+        u.setNickname("旧姓名");
+        SysUser created = userService.createUser(u, "Pwd-123456!", List.of());
+
+        userService.updateOwnProfile(created.getId(), "新姓名", "13900000001", "new-profile@example.com");
+
+        SysUser fromDb = userService.getById(created.getId());
+        assertThat(fromDb.getNickname()).isEqualTo("新姓名");
+        assertThat(fromDb.getMobile()).isEqualTo("13900000001");
+        assertThat(fromDb.getEmail()).isEqualTo("new-profile@example.com");
+        // 用户名不接受这个方法修改
+        assertThat(fromDb.getUsername()).isEqualTo("profile-self-user");
+
+        SysUser other = new SysUser();
+        other.setUsername("profile-other-user");
+        other.setMobile("13900000002");
+        userService.createUser(other, "Pwd-123456!", List.of());
+
+        assertThatThrownBy(() ->
+                userService.updateOwnProfile(created.getId(), "新姓名", "13900000002", null))
+                .hasMessageContaining("手机号已被占用");
+    }
+
+    @Test
+    @DisplayName("授权是重建语义：整体覆盖而非增量累加")
+    void assignRolesIsRebuildNotAppend() {
+        SysRole r1 = newRole("ROLE_A", "角色甲");
+        SysRole r2 = newRole("ROLE_B", "角色乙");
+        SysRole r3 = newRole("ROLE_C", "角色丙");
+
+        SysUser u = new SysUser();
+        u.setUsername("wangwu");
+        SysUser created = userService.createUser(u, "pwd-123456",
+                List.of(r1.getId(), r2.getId()));
+        assertThat(userService.roleIdsOf(created.getId()))
+                .containsExactlyInAnyOrder(r1.getId(), r2.getId());
+
+        // 重新授权为单个角色：旧的两个应被清除，而不是累加成三个
+        userService.assignRoles(created.getId(), List.of(r3.getId()));
+        assertThat(userService.roleIdsOf(created.getId()))
+                .containsExactly(r3.getId());
+
+        // 清空授权
+        userService.assignRoles(created.getId(), List.of());
+        assertThat(userService.roleIdsOf(created.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("角色授予菜单同样是重建语义")
+    void assignMenusIsRebuild() {
+        SysRole role = newRole("ROLE_MENU", "菜单测试角色");
+        List<Long> allMenuIds = menuService.list().stream().map(SysMenu::getId).toList();
+        assertThat(allMenuIds).isNotEmpty();
+
+        roleService.assignMenus(role.getId(), allMenuIds);
+        assertThat(roleService.menuIdsOf(role.getId())).hasSameSizeAs(allMenuIds);
+
+        roleService.assignMenus(role.getId(), List.of(allMenuIds.get(0)));
+        assertThat(roleService.menuIdsOf(role.getId())).containsExactly(allMenuIds.get(0));
+    }
+
+    @Test
+    @DisplayName("菜单树在内存中组装，不依赖递归 CTE")
+    void menuTree() {
+        List<SysMenu> tree = menuService.tree();
+
+        assertThat(tree).as("应有根节点").isNotEmpty();
+        SysMenu root = tree.stream()
+                .filter(m -> "系统管理".equals(m.getMenuName()))
+                .findFirst().orElseThrow();
+        assertThat(root.getParentId()).isZero();
+        assertThat(root.getChildren())
+                .as("子节点应被挂载到父节点下")
+                .extracting(SysMenu::getMenuName)
+                .contains("部门管理");
+    }
+
+    @Test
+    @DisplayName("按用户过滤的菜单树只含其被授权的部分，且不含按钮")
+    void menuTreeOfUser() {
+        SysUser admin = userService.findByUsername("admin");
+        List<SysMenu> tree = menuService.treeOf(admin.getId());
+        assertThat(tree).isNotEmpty();
+        assertNoButton(tree);
+
+        // 未授权任何菜单的用户，拿到空树而不是全量
+        SysUser u = new SysUser();
+        u.setUsername("nobody");
+        SysUser created = userService.createUser(u, "pwd-123456", List.of());
+        assertThat(menuService.treeOf(created.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("部门树可用")
+    void deptTree() {
+        SysDept child = new SysDept();
+        child.setDeptName("信息中心");
+        child.setParentId(deptService.list().get(0).getId());
+        deptService.save(child);
+
+        List<SysDept> tree = deptService.tree();
+        assertThat(tree).extracting(SysDept::getDeptName).contains("总部");
+        assertThat(tree.stream().flatMap(d -> d.getChildren().stream()))
+                .extracting(SysDept::getDeptName)
+                .contains("信息中心");
+    }
+
+    @Test
+    @DisplayName("ancestors 物化路径在创建与移动部门时正确维护")
+    void ancestorsMaintainedOnCreateAndMove() {
+        Long rootId = deptService.list().get(0).getId();
+
+        Long level1Id = newDept("ancestors-测试-一级", rootId);
+        assertThat(deptService.getById(level1Id).getAncestors()).isEqualTo(String.valueOf(rootId));
+
+        Long level2Id = newDept("ancestors-测试-二级", level1Id);
+        assertThat(deptService.getById(level2Id).getAncestors()).isEqualTo(rootId + "," + level1Id);
+
+        // 把一级部门挪到一个新的根下，二级部门是它的子孙，ancestors 应跟着级联更新
+        Long newRootId = newDept("ancestors-测试-新根", 0L);
+        SysDept moved = new SysDept();
+        moved.setDeptName("ancestors-测试-一级");
+        moved.setParentId(newRootId);
+        moved.setSort(0);
+        moved.setStatus(1);
+        moved.setVersion(deptService.getById(level1Id).getVersion());
+        deptService.updateDept(level1Id, moved);
+
+        assertThat(deptService.getById(level1Id).getAncestors()).isEqualTo(String.valueOf(newRootId));
+        assertThat(deptService.getById(level2Id).getAncestors())
+                .as("移动父部门后，子孙的 ancestors 应级联更新，不能停留在旧路径")
+                .isEqualTo(newRootId + "," + level1Id);
+    }
+
+    @Test
+    @DisplayName("不能把部门移动到自己的子部门下，防止 ancestors 成环")
+    void cannotMoveDeptUnderOwnDescendant() {
+        Long parentId = newDept("ancestors-成环-父", 0L);
+        Long childId = newDept("ancestors-成环-子", parentId);
+
+        SysDept move = new SysDept();
+        move.setDeptName("ancestors-成环-父");
+        move.setParentId(childId);
+        move.setSort(0);
+        move.setStatus(1);
+        move.setVersion(deptService.getById(parentId).getVersion());
+
+        assertThatThrownBy(() -> deptService.updateDept(parentId, move))
+                .hasMessageContaining("不能把部门移动到自己或自己的子部门下");
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private Long newDept(String name, Long parentId) {
+        SysDept dept = new SysDept();
+        dept.setDeptName(name);
+        dept.setParentId(parentId);
+        dept.setSort(0);
+        dept.setStatus(1);
+        return deptService.createDept(dept).getId();
+    }
+
+    private SysRole newRole(String code, String name) {
+        SysRole r = new SysRole();
+        r.setRoleCode(code);
+        r.setRoleName(name);
+        r.setSort(0);
+        roleService.save(r);
+        return r;
+    }
+
+    private static void assertNoButton(List<SysMenu> nodes) {
+        for (SysMenu m : nodes) {
+            assertThat(m.getMenuType())
+                    .as("路由菜单树不应包含按钮类型")
+                    .isNotEqualTo(SysMenu.TYPE_BUTTON);
+            assertNoButton(m.getChildren());
+        }
+    }
+}
