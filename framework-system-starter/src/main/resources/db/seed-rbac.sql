@@ -317,13 +317,20 @@ WHERE m.perm_code = 'system:oper-log:list' AND m.deleted = 0
 
 -- -----------------------------------------------------------------------------
 -- 登录锁定可观测性（docs/LOGIN_MODULE_AUDIT.md D 项）。暂无前端管理页面，
--- 先注册权限点避免 403；页面落地后把下面 MENU 那一行的 visible 改成 1
+-- 先注册权限点避免 403；页面落地后补上 path / component 并把 visible 改成 1
 -- （先例是 system:online 当年同样经历过的过渡状态，见上方注释）。
+--
+-- ⚠️ path / component 必须留 NULL，不能靠 visible = 0 来"藏起来"。
+-- visible 只管侧边栏显隐，visible = 0 的菜单照常下发路由（这正是隐藏页面能力的基础，
+-- 见 CLAUDE.md 4.5.1）。这里若填上 component，前端会拿一个并不存在的
+-- 'system/security/index' 去 pageMap 查找，查不到就静默回落 404 页并在控制台报
+-- "route component is invalid"——每次登录一条，指向一个根本没打算存在的页面。
+-- 无 path 的菜单会被 toRouteRecords 直接过滤掉，权限点照常随 /api/auth/me 下发。
 -- -----------------------------------------------------------------------------
 
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
                       create_time, update_time, deleted, version)
-SELECT m.id, '登录锁定', 'MENU', 'system:security:list', '/system/security', 'system/security/index',
+SELECT m.id, '登录锁定', 'MENU', 'system:security:list', NULL, NULL,
        'lucide:lock', 9, 0, NOW(), NOW(), 0, 0
 FROM sys_menu m
 WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0

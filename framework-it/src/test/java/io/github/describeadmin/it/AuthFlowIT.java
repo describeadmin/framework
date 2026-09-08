@@ -13,6 +13,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -39,6 +40,7 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
 
     @Autowired TestRestTemplate rest;
     @Autowired CacheProvider cacheProvider;
+    @Autowired JdbcTemplate jdbc;
 
     // ------------------------------------------------------------------ 登录
 
@@ -134,6 +136,52 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat((List<?>) resp.getBody().get("data")).isNotEmpty();
+    }
+
+    /**
+     * visible = 0 只是不进侧边栏，不是停用。
+     *
+     * <p>这条守的是「独立新增/编辑页」这个能力：菜单树若按 visible 过滤，记录根本不下发、
+     * 前端就不会生成路由，敲 URL 直接落 404——业务方于是没有任何办法做出「页面存在但不进
+     * 侧边栏」的页面。回归时的表现极具欺骗性：菜单管理里那条记录好端端躺着，页面就是打不开。
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("visible=0 的菜单仍随菜单树下发（隐藏 ≠ 停用），activePath 原样带出")
+    void hiddenMenuIsStillRoutable() {
+        String path = "/it-hidden/detail";
+        try {
+            jdbc.update("INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path,"
+                            + " component, icon, sort, visible, active_path, create_time, update_time,"
+                            + " deleted, version) VALUES (0, ?, 'MENU', NULL, ?, ?, NULL, 900, 0, ?,"
+                            + " NOW(), NOW(), 0, 0)",
+                    "隐藏详情页", path, "it-hidden/detail", "/system/user");
+            jdbc.update("INSERT INTO sys_role_menu (role_id, menu_id)"
+                    + " SELECT r.id, m.id FROM sys_role r, sys_menu m"
+                    + " WHERE r.role_code = 'ADMIN' AND r.deleted = 0 AND m.path = ? AND m.deleted = 0",
+                    path);
+
+            ResponseEntity<Map> resp = rest.exchange("/api/auth/menus", HttpMethod.GET,
+                    new HttpEntity<>(bearer(tokenOfAdmin())), Map.class);
+
+            assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+            List<Map<String, Object>> menus = (List<Map<String, Object>>) resp.getBody().get("data");
+            Map<String, Object> hidden = menus.stream()
+                    .filter(m -> path.equals(m.get("path")))
+                    .findFirst()
+                    .orElse(null);
+
+            // 值断言而非存在性断言（CLAUDE.md 3.6）：节点在、且两个字段原样带出，
+            // 前端才能把它们转成 meta.hideInMenu / meta.activePath
+            assertThat(hidden).as("visible=0 的菜单被 treeOf 过滤掉了").isNotNull();
+            assertThat(hidden.get("menuName")).isEqualTo("隐藏详情页");
+            assertThat(hidden.get("visible")).isEqualTo(0);
+            assertThat(hidden.get("activePath")).isEqualTo("/system/user");
+        } finally {
+            jdbc.update("DELETE FROM sys_role_menu WHERE menu_id IN"
+                    + " (SELECT id FROM sys_menu WHERE path = ?)", path);
+            jdbc.update("DELETE FROM sys_menu WHERE path = ?", path);
+        }
     }
 
     // ------------------------------------------------------------------ 刷新令牌（E 项）

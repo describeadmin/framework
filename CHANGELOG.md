@@ -10,13 +10,29 @@
 ## 0.2.2 (2026-09-07)
 
 `codegen` 已于 2026-09-03 单独发过 `0.2.2`（当时 `framework` 无改动、破例不同号）。
-本次 `framework` 在 0.2.2 里叠加两块内容：一个会崩溃的 bug 修复与整套锁能力——
-`api/` 包只增不改（新增 `LockOperations` / `LockHandle` / `DistributedLock` /
-`LockStrategy`），`0.2.x` 接入方直接升级即可。
+本次 `framework` 在 0.2.2 里叠加三块内容：一个会崩溃的 bug 修复、整套锁能力，
+以及「隐藏菜单」——`api/` 包只增不改（新增 `LockOperations` / `LockHandle` /
+`DistributedLock` / `LockStrategy`），`0.2.x` 接入方直接升级即可，
+但 `sys_menu` 有一处**行为语义变更 + 一列新增**，存量库需手动 `ALTER TABLE`，见下。
 
 ### Breaking Changes
 
-- 无（`SysRoleService.save/updateById` 现在会拒绝重复 `roleCode`——严格说这是
+- **`sys_menu.visible = 0` 的语义从「停用」变成「隐藏」**。此前
+  `SysMenuService.treeOf()` 按 `visible = 1` 过滤，`visible = 0` 的菜单根本不下发，
+  前端不生成路由、敲 URL 落 404。现在 `visible` 只控制侧边栏显隐，路由照常下发，
+  **能不能访问完全由角色授权决定**。若既有部署把 `visible = 0` 当停用开关用，
+  升级后这些页面会变得可访问（前提是该菜单仍授权给了对应角色）——
+  升级前请检查 `SELECT * FROM sys_menu WHERE visible = 0` 并按需取消授权。
+- **`sys_menu` 新增 `active_path` 列**。`schema-rbac.sql` 是
+  `CREATE TABLE IF NOT EXISTS`，存量库不会自动加列，需手动执行：
+
+  ```sql
+  ALTER TABLE sys_menu ADD COLUMN active_path VARCHAR(191) NULL
+    COMMENT '侧边栏高亮路径' AFTER visible;
+  ```
+
+  （同类先例：`sys_user.mobile` / `sys_dept.ancestors` / `sys_role.home_path`）
+- （`SysRoleService.save/updateById` 现在会拒绝重复 `roleCode`——严格说这是
   新增校验而非破坏：此前连校验都没有，重复角色标识能正常落库，属于漏洞修复）
 
 ### New Features
@@ -39,6 +55,12 @@
 - **配置项** `describeadmin.lock.{default-strategy, key-prefix}`：默认策略与
   键前缀交给部署方决定；非法取值（strategy 配成 DEFAULT、前缀为空）启动期拒绝。
   启动日志打印当前生效的锁实现（内存 / Redis）。
+- **隐藏菜单：支持「页面存在但不进侧边栏」**。框架自带的增删改都是弹窗表单，
+  业务复杂时需要独立的新增/编辑页——这类页面要有路由、要受 RBAC 管，但不该出现在
+  侧边栏。做法是建一条 `menu_type = MENU`、`visible = 0` 的菜单记录，
+  再用新增的 `active_path` 列指定侧边栏高亮落在哪一项（通常填所属列表页的 `path`），
+  否则进入该页后侧边栏无任何选中态、面包屑断在父级。权限点复用列表页的
+  `xxx:add` / `xxx:edit`，不新建；该菜单必须在角色授权树里勾选，否则拿不到路由。
 - `framework-cache-redis-starter` 0.2.2：新增 `RedisLockOperations`，锁键前缀
   取框架的 `describeadmin.lock.key-prefix`（不叠加插件自己的缓存前缀），
   内存/Redis 两实现产出完全相同的键名，替换实现不改变锁语义。

@@ -94,7 +94,10 @@ CREATE TABLE IF NOT EXISTS sys_menu (
   component    VARCHAR(191)     NULL                COMMENT '前端组件路径',
   icon         VARCHAR(64)      NULL                COMMENT '图标',
   sort         INT          NOT NULL DEFAULT 0      COMMENT '排序',
-  visible      TINYINT      NOT NULL DEFAULT 1      COMMENT '是否显示：1是 0否',
+  -- visible 只管侧边栏显隐，不管能不能访问：0 的菜单照常下发路由，访问权由角色授权决定。
+  -- 这是「独立新增/编辑页」的落地方式——页面要存在、要受 RBAC 管，但不该出现在侧边栏。
+  visible      TINYINT      NOT NULL DEFAULT 1      COMMENT '是否在侧边栏显示：1是 0否（0 仍可访问）',
+  active_path  VARCHAR(191)     NULL                COMMENT '侧边栏高亮路径，隐藏页面填其所属菜单的 path',
   create_by    BIGINT           NULL                COMMENT '创建人',
   create_time  DATETIME         NULL                COMMENT '创建时间',
   update_by    BIGINT           NULL                COMMENT '更新人',

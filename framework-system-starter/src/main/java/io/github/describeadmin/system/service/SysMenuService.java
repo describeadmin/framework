@@ -25,7 +25,7 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     /**
      * 落库前把空白 {@code permCode}/{@code icon} 归一为 {@code null}。
      *
-     * <p>目录、普通菜单可以没有权限标识，图标也可留空。前端表单清空后提交的是空串
+     * <p>目录、普通菜单可以没有权限标识，图标与高亮路径也可留空。前端表单清空后提交的是空串
      * 而非 {@code null}，直接写库就得到 {@code ''}——与"未填 = NULL"的语义冲突，
      * 且空串权限标识会污染用户权限集合。这里在唯一的写入口统一处理，是治本；
      * {@code SysRelationMapper.selectPermCodesByUserId} 的过滤与
@@ -50,6 +50,9 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
         if (menu.getIcon() != null && menu.getIcon().isBlank()) {
             menu.setIcon(null);
         }
+        if (menu.getActivePath() != null && menu.getActivePath().isBlank()) {
+            menu.setActivePath(null);
+        }
     }
 
     /** 全量菜单树（管理端用）。 */
@@ -58,22 +61,27 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     }
 
     /**
-     * 指定用户可见的菜单树（前端路由用）。
+     * 指定用户有权访问的菜单树（前端路由用）。
      *
      * <p>只返回目录与菜单，不含按钮——按钮属于权限点，随 {@code /api/auth/me}
      * 的 permissions 字段下发，前端据此控制按钮显隐。
+     *
+     * <p><b>刻意不按 {@code visible} 过滤</b>：显隐与授权是两件事。这里过滤掉
+     * {@code visible = 0} 的话，记录根本不下发、前端也就不会生成路由，直接敲 URL 落 404——
+     * 那是「停用」而非「隐藏」，业务方就没有任何办法做出「页面存在但不进侧边栏」的
+     * 独立新增/编辑页。访问控制由上面的 {@code selectMenuIdsByUserId} 授权关系独家把关，
+     * {@code visible} 原样下发给前端转成路由的 {@code meta.hideInMenu}。
      */
     public List<SysMenu> treeOf(Long userId) {
         Set<Long> allowed = Set.copyOf(relationMapper.selectMenuIdsByUserId(userId));
         if (allowed.isEmpty()) {
             return Collections.emptyList();
         }
-        List<SysMenu> visible = list(new QueryWrapper<SysMenu>()
+        List<SysMenu> routable = list(new QueryWrapper<SysMenu>()
                 .in("id", allowed)
                 .ne("menu_type", SysMenu.TYPE_BUTTON)
-                .eq("visible", 1)
                 .orderByAsc("sort"));
-        return toTree(visible);
+        return toTree(routable);
     }
 
     private List<SysMenu> toTree(List<SysMenu> flat) {

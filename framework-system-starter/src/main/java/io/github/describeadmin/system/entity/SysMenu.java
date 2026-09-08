@@ -24,7 +24,21 @@ public class SysMenu extends BaseEntity {
     private String component;
     private String icon;
     private Integer sort;
+    /**
+     * 是否在侧边栏显示：1 是 / 0 否。
+     *
+     * <p><b>只管显隐，不管能不能访问</b>——0 的菜单照常下发路由，访问权由角色授权决定。
+     * 独立的新增/编辑页就靠这个落地：页面要存在、要受 RBAC 管，但不该出现在侧边栏。
+     */
     private Integer visible;
+
+    /**
+     * 侧边栏高亮路径，对应前端路由的 {@code meta.activePath}。
+     *
+     * <p>隐藏页面填其所属菜单的 {@code path}（如详情页填列表页的 {@code /system/user}），
+     * 否则进入该页后侧边栏没有任何一项处于选中态，面包屑也断在父级。
+     */
+    private String activePath;
 
     /** 非持久化字段：构建菜单树时装子节点。 */
     @TableField(exist = false)
@@ -48,6 +62,8 @@ public class SysMenu extends BaseEntity {
     public void setSort(Integer sort) { this.sort = sort; }
     public Integer getVisible() { return visible; }
     public void setVisible(Integer visible) { this.visible = visible; }
+    public String getActivePath() { return activePath; }
+    public void setActivePath(String activePath) { this.activePath = activePath; }
     public List<SysMenu> getChildren() { return children; }
     public void setChildren(List<SysMenu> children) { this.children = children; }
 }
