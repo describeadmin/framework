@@ -323,6 +323,49 @@ class SystemModuleIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
+    @DisplayName("菜单可空字段：编辑时置空能真正写回 NULL（不被 NOT_NULL 更新策略拦截）")
+    void menuNullableFieldsCanBeCleared() {
+        SysMenu m = new SysMenu();
+        m.setMenuName("待清空测试");
+        m.setMenuType(SysMenu.TYPE_MENU);
+        m.setParentId(0L);
+        m.setPermCode("test:clear:list");
+        m.setPath("/test/clear");
+        m.setComponent("test/clear/index");
+        m.setIcon("lucide:eraser");
+        m.setActivePath("/test/list");
+        menuService.save(m);
+
+        // 编辑：把全部可空字段留空提交（前端表单删空即走到这里）
+        SysMenu edit = new SysMenu();
+        edit.setId(m.getId());
+        edit.setMenuName("已清空测试");
+        edit.setMenuType(SysMenu.TYPE_MENU);
+        edit.setParentId(0L);
+        edit.setVersion(m.getVersion()); // 满足乐观锁
+        assertThat(menuService.updateById(edit)).isTrue();
+
+        SysMenu reloaded = menuService.getById(m.getId());
+        assertThat(reloaded.getMenuName()).isEqualTo("已清空测试");
+        assertThat(reloaded.getPermCode()).as("perm_code 应被清空").isNull();
+        assertThat(reloaded.getPath()).as("path 应被清空").isNull();
+        assertThat(reloaded.getComponent()).as("component 应被清空").isNull();
+        assertThat(reloaded.getIcon()).as("icon 应被清空").isNull();
+        assertThat(reloaded.getActivePath()).as("active_path 应被清空").isNull();
+
+        // 反向：非空值仍能正常写入
+        SysMenu reset = new SysMenu();
+        reset.setId(m.getId());
+        reset.setMenuName("已清空测试");
+        reset.setMenuType(SysMenu.TYPE_MENU);
+        reset.setParentId(0L);
+        reset.setPath("/test/again");
+        reset.setVersion(reloaded.getVersion());
+        assertThat(menuService.updateById(reset)).isTrue();
+        assertThat(menuService.getById(m.getId()).getPath()).isEqualTo("/test/again");
+    }
+
+    @Test
     @DisplayName("按用户过滤的菜单树只含其被授权的部分，且不含按钮")
     void menuTreeOfUser() {
         SysUser admin = userService.findByUsername("admin");
