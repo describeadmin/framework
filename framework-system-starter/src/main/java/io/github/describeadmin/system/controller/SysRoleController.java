@@ -1,5 +1,7 @@
 package io.github.describeadmin.system.controller;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.core.OperLog;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /** 角色管理。 */
 @RestController
@@ -30,6 +33,17 @@ public class SysRoleController extends BaseController<SysRoleService, SysRoleMap
     @Override
     protected SysRoleService getService() {
         return service;
+    }
+
+    /**
+     * 列表查询的筛选条件，见 {@link SysUserController#buildListWrapper} 同一处理方式。
+     */
+    @Override
+    protected Wrapper<SysRole> buildListWrapper(Map<String, String> params) {
+        QueryWrapper<SysRole> wrapper = new QueryWrapper<>();
+        wrapper.likeRight(text(params, "roleName") != null, "role_name", text(params, "roleName"));
+        wrapper.likeRight(text(params, "roleCode") != null, "role_code", text(params, "roleCode"));
+        return wrapper;
     }
 
     @PreAuthorize("hasAuthority('system:role:list')")

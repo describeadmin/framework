@@ -1,11 +1,15 @@
 package io.github.describeadmin.system.controller;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.entity.SysDictType;
 import io.github.describeadmin.system.mapper.SysDictTypeMapper;
 import io.github.describeadmin.system.service.SysDictTypeService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 /**
  * 字典类型管理。
@@ -32,5 +36,17 @@ public class SysDictTypeController
     @Override
     public String permPrefix() {
         return "system:dict";
+    }
+
+    /**
+     * 列表查询的筛选条件，见 {@link SysUserController#buildListWrapper} 同一处理方式。
+     */
+    @Override
+    protected Wrapper<SysDictType> buildListWrapper(Map<String, String> params) {
+        QueryWrapper<SysDictType> wrapper = new QueryWrapper<>();
+        wrapper.likeRight(text(params, "dictName") != null, "dict_name", text(params, "dictName"));
+        wrapper.likeRight(text(params, "dictType") != null, "dict_type", text(params, "dictType"));
+        wrapper.eq(asInt(params, "status") != null, "status", asInt(params, "status"));
+        return wrapper;
     }
 }

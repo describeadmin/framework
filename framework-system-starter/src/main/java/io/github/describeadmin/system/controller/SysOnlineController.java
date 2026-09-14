@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -49,11 +50,23 @@ public class SysOnlineController {
      * 响应里不含令牌本身，理由见 {@link ActiveSession} 的类注释。
      *
      * <p>排序沿用 {@link TokenStore#listActive()} 的约定：最近登录的在前。
+     *
+     * <p>{@code username} 过滤在应用层做（子串匹配，不区分大小写）——数据源是
+     * {@link TokenStore#listActive()} 的内存快照，没有数据库表可下推 SQL 条件，
+     * 与本类分页在应用层做是同一个理由。
      */
     @PreAuthorize("hasAuthority('system:online:list')")
     @GetMapping
-    public Result<PageResult<ActiveSession>> list(PageQuery query) {
+    public Result<PageResult<ActiveSession>> list(PageQuery query,
+            @RequestParam(required = false) String username) {
         List<ActiveSession> all = tokenStore.listActive();
+        if (username != null && !username.isBlank()) {
+            String keyword = username.trim().toLowerCase();
+            all = all.stream()
+                    .filter(session -> session.getUsername() != null
+                            && session.getUsername().toLowerCase().contains(keyword))
+                    .toList();
+        }
         long total = all.size();
         int from = (int) Math.min((query.getCurrent() - 1) * query.getSize(), total);
         int to = (int) Math.min(from + query.getSize(), total);

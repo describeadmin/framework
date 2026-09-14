@@ -1,5 +1,7 @@
 package io.github.describeadmin.system.controller;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.common.api.ResultCode;
@@ -42,6 +44,23 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
     @Override
     protected SysUserService getService() {
         return service;
+    }
+
+    /**
+     * 列表查询的筛选条件。
+     *
+     * <p>空值不参与筛选，否则「不填任何条件」会退化成 {@code WHERE col = ''}，一条都查不出。
+     * LIKE 一律右模糊，可走索引；不生成左模糊以免全表扫描。
+     */
+    @Override
+    protected Wrapper<SysUser> buildListWrapper(Map<String, String> params) {
+        QueryWrapper<SysUser> wrapper = new QueryWrapper<>();
+        wrapper.likeRight(text(params, "username") != null, "username", text(params, "username"));
+        wrapper.likeRight(text(params, "nickname") != null, "nickname", text(params, "nickname"));
+        wrapper.likeRight(text(params, "mobile") != null, "mobile", text(params, "mobile"));
+        wrapper.eq(asInt(params, "status") != null, "status", asInt(params, "status"));
+        wrapper.eq(asLong(params, "deptId") != null, "dept_id", asLong(params, "deptId"));
+        return wrapper;
     }
 
     /**
