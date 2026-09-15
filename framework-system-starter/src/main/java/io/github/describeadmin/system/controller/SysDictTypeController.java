@@ -40,10 +40,19 @@ public class SysDictTypeController
 
     /**
      * 列表查询的筛选条件，见 {@link SysUserController#buildListWrapper} 同一处理方式。
+     *
+     * <p>{@code keyword} 是前端字典管理页单搜索框用的组合条件——同时对 {@code dict_name}
+     * 与 {@code dict_type} 做 OR 匹配，避免页面并排放两个输入框在窄屏下挤成一堆。
+     * {@code dictName}/{@code dictType} 两个精确字段保留，供业务方需要分别过滤时使用，
+     * 与 {@code keyword} 可以同时传、叠加为 AND。
      */
     @Override
     protected Wrapper<SysDictType> buildListWrapper(Map<String, String> params) {
         QueryWrapper<SysDictType> wrapper = new QueryWrapper<>();
+        String keyword = text(params, "keyword");
+        if (keyword != null) {
+            wrapper.and(w -> w.likeRight("dict_name", keyword).or().likeRight("dict_type", keyword));
+        }
         wrapper.likeRight(text(params, "dictName") != null, "dict_name", text(params, "dictName"));
         wrapper.likeRight(text(params, "dictType") != null, "dict_type", text(params, "dictType"));
         wrapper.eq(asInt(params, "status") != null, "status", asInt(params, "status"));
