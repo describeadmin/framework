@@ -24,13 +24,19 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     }
 
     /**
-     * 落库前把空白 {@code permCode}/{@code icon} 归一为 {@code null}。
+     * 落库前把 5 个可空列（{@code permCode} / {@code path} / {@code component} /
+     * {@code icon} / {@code activePath}）的空白值归一为 {@code null}。
      *
-     * <p>目录、普通菜单可以没有权限标识，图标与高亮路径也可留空。前端表单清空后提交的是空串
-     * 而非 {@code null}，直接写库就得到 {@code ''}——与"未填 = NULL"的语义冲突，
-     * 且空串权限标识会污染用户权限集合。这里在唯一的写入口统一处理，是治本；
-     * {@code SysRelationMapper.selectPermCodesByUserId} 的过滤与
+     * <p>目录、普通菜单可以没有权限标识，按钮没有 path/component，图标与高亮路径也可留空。
+     * 前端表单清空后提交的是空串而非 {@code null}，直接写库就得到 {@code ''}——
+     * 与"未填 = NULL"的语义冲突，且空串权限标识会污染用户权限集合、空串 {@code component}
+     * 会让前端拿一个不存在的组件名去 pageMap 查找并静默回落 404。这里在唯一的写入口
+     * 统一处理，是治本；{@code SysRelationMapper.selectPermCodesByUserId} 的过滤与
      * {@code TokenAuthenticationFilter} 的容错是对既有脏数据的兜底。
+     *
+     * <p>这 5 列与 {@link #updateById} 里 {@code clearColumnIfNull} 的列表必须<b>一一对应</b>：
+     * 少一列，那一列就永远回不到 {@code NULL}（空串走不到 null 分支，而 {@code NOT_NULL}
+     * 更新策略只跳过 {@code null}），表现为"表单删空、提交、刷新后旧值又回来"。
      */
     @Override
     public boolean save(SysMenu entity) {
@@ -81,16 +87,32 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     /**
      * 字段被清空（{@code null}）时往 wrapper 补一条 {@code col = NULL}；非 {@code null} 时
      * 不管——那条由实体参数负责，重复 set 同一列会在部分国产化库上报错。
+     *
+     * <p><b>必须用 {@code setSql} 写字面量 {@code NULL}，不能用 {@code set(column, null)}</b>：
+     * 后者生成的是参数占位符（{@code col = ?} 绑 {@code null}），本框架不配
+     * {@code mybatis-plus.configuration.jdbc-type-for-null}（那是全局开关，会改变所有实体的
+     * null 绑定行为），MyBatis 于是按 {@code JdbcType.OTHER} 调 {@code setNull}——
+     * MySQL 接受，达梦 / 金仓直接报"无效的列类型"。只在 CLAUDE.md §3 承诺兼容的库上炸，
+     * 本地怎么测都测不出来。
+     *
+     * <p>{@code column} 全部来自 {@link #updateById} 里的字面量，不含任何外部输入，
+     * 拼进 SQL 无注入面。
      */
     private static void clearColumnIfNull(UpdateWrapper<SysMenu> wrapper, String column, String value) {
         if (value == null) {
-            wrapper.set(column, null);
+            wrapper.setSql(column + " = NULL");
         }
     }
 
     private static void normalizeBlankToNull(SysMenu menu) {
         if (menu.getPermCode() != null && menu.getPermCode().isBlank()) {
             menu.setPermCode(null);
+        }
+        if (menu.getPath() != null && menu.getPath().isBlank()) {
+            menu.setPath(null);
+        }
+        if (menu.getComponent() != null && menu.getComponent().isBlank()) {
+            menu.setComponent(null);
         }
         if (menu.getIcon() != null && menu.getIcon().isBlank()) {
             menu.setIcon(null);

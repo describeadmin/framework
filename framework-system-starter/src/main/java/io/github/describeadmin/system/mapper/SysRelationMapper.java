@@ -29,16 +29,26 @@ public interface SysRelationMapper {
     // TRIM(...) <> '' 把"权限标识留空"存成的空串一并挡在权限集合之外：空串不是 NULL，
     // 仅靠 IS NOT NULL 过不掉，会一路流到前端按钮显隐和 TokenAuthenticationFilter
     // （后者对空串 authority 直接抛异常）。TRIM 与 <> '' 均属 MySQL 5.7 安全子集。
+    //
+    // ⚠️ 子查询里的 r.deleted = 0 不能省：删除角色是 sys_role 的【逻辑】删除，
+    // sys_user_role 的关联行原样保留（授权是重建语义，见类注释），只查关联表的话
+    // 被删角色会继续下发权限点。症状极难定位——同文件的 selectRoleCodesByUserId 有这个
+    // 条件，于是 hasRole() 立刻失效、hasAuthority() 却照过，看起来不像同一件事。
     @Select("SELECT DISTINCT m.perm_code FROM sys_menu m "
             + "JOIN sys_role_menu rm ON rm.menu_id = m.id "
             + "WHERE m.perm_code IS NOT NULL AND TRIM(m.perm_code) <> '' AND m.deleted = 0 "
-            + "AND rm.role_id IN (SELECT ur.role_id FROM sys_user_role ur WHERE ur.user_id = #{userId})")
+            + "AND rm.role_id IN (SELECT ur.role_id FROM sys_user_role ur "
+            + "JOIN sys_role r ON r.id = ur.role_id "
+            + "WHERE ur.user_id = #{userId} AND r.deleted = 0)")
     List<String> selectPermCodesByUserId(@Param("userId") Long userId);
 
+    /** 同 {@link #selectPermCodesByUserId}，子查询同样要排除已逻辑删除的角色。 */
     @Select("SELECT DISTINCT m.id FROM sys_menu m "
             + "JOIN sys_role_menu rm ON rm.menu_id = m.id "
             + "WHERE m.deleted = 0 "
-            + "AND rm.role_id IN (SELECT ur.role_id FROM sys_user_role ur WHERE ur.user_id = #{userId})")
+            + "AND rm.role_id IN (SELECT ur.role_id FROM sys_user_role ur "
+            + "JOIN sys_role r ON r.id = ur.role_id "
+            + "WHERE ur.user_id = #{userId} AND r.deleted = 0)")
     List<Long> selectMenuIdsByUserId(@Param("userId") Long userId);
 
     @Select("SELECT rm.menu_id FROM sys_role_menu rm WHERE rm.role_id = #{roleId}")

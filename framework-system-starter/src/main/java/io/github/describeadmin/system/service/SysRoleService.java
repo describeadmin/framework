@@ -10,6 +10,7 @@ import io.github.describeadmin.system.mapper.SysRelationMapper;
 import io.github.describeadmin.system.mapper.SysRoleMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -39,6 +40,10 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
      *
      * <p>{@code selfId} 语义同 {@code SysDictTypeService}：新建传 {@code null}，
      * 编辑传当前 id，排除"改别的字段但 code 没变"的误判。
+     *
+     * <p><b>调用方必须先保证 {@code roleCode} 非空白</b>（见 {@link #requireRoleCode}）：
+     * 空值进来时 {@code eq("role_code", null)} 生成恒不成立的 {@code role_code = NULL}，
+     * 本方法会静默放行。
      */
     private void assertRoleCodeAvailable(Long selfId, String roleCode) {
         SysRole exist = getOne(new QueryWrapper<SysRole>().eq("role_code", roleCode), false);
@@ -47,16 +52,39 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
         }
     }
 
+    /**
+     * 角色标识不得为空白。
+     *
+     * <p>不校验的话这一路全程静默：{@link UniqueGuard#execute} 对空值按设计跳过加锁，
+     * {@link #assertRoleCodeAvailable} 的 {@code role_code = NULL} 恒不成立，
+     * 最后由数据库的 {@code NOT NULL} 约束以 <b>500</b> 收场——而这本是一个 400 的输入问题，
+     * 报错里没有任何东西指向"角色标识没填"。
+     */
+    private static void requireRoleCode(String roleCode) {
+        if (!StringUtils.hasText(roleCode)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "角色标识不能为空");
+        }
+    }
+
     @Override
     public boolean save(SysRole entity) {
+        requireRoleCode(entity.getRoleCode());
         return uniqueGuard.execute("sys:role:code", entity.getRoleCode(), () -> {
             assertRoleCodeAvailable(null, entity.getRoleCode());
             return super.save(entity);
         });
     }
 
+    /**
+     * 编辑角色。{@code roleCode} 为 {@code null} 表示"不改这个字段"（{@code NOT_NULL}
+     * 更新策略会跳过它）；但<b>空白非 null 是显式想清空</b>，而角色标识不允许为空——
+     * 空串绕得过数据库的 {@code NOT NULL}，会真的把 {@code role_code = ''} 写进库。
+     */
     @Override
     public boolean updateById(SysRole entity) {
+        if (entity.getRoleCode() != null) {
+            requireRoleCode(entity.getRoleCode());
+        }
         return uniqueGuard.execute("sys:role:code", entity.getRoleCode(), () -> {
             if (entity.getRoleCode() != null) {
                 assertRoleCodeAvailable(entity.getId(), entity.getRoleCode());

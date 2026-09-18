@@ -70,16 +70,24 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
      * <p>这里的取舍是"能启动 + 一条照着做就能修的 WARN"，而不是"直接拒绝启动"：
      * 退化后 {@link #createUser} 的多条写入不再原子（建号失败可能留下没有角色的用户），
      * 但这只发生在多事务管理器且未指定主库的场景，且日志已明说代价与修法。
+     *
+     * <p><b>必须用 {@code getIfUnique()} 而不是 {@code getIfAvailable()}</b>：后者
+     * 在候选<b>多于一个</b>时直接抛 {@code NoUniqueBeanDefinitionException}，而"多数据源
+     * 各配一个 {@code TransactionTemplate}"恰恰是上面要保护的那批业务方最自然的写法——
+     * 用 {@code getIfAvailable()} 的话，降级逻辑会在它唯一该生效的场景里把启动打挂。
+     * {@code getIfUnique()} 对"一个都没有"和"有多个但无从选择"一视同仁地返回 {@code null}，
+     * 两种形态都落到下面的降级分支。
      */
     private static TransactionOperations resolveTransactionOperations(
             ObjectProvider<TransactionTemplate> provider) {
-        TransactionTemplate template = provider.getIfAvailable();
+        TransactionTemplate template = provider.getIfUnique();
         if (template != null) {
             return template;
         }
-        log.warn("容器中没有 TransactionTemplate（通常是配了多个 TransactionManager 且都没标 @Primary），"
+        log.warn("容器中没有唯一的 TransactionTemplate（一个都没有，通常是配了多个 TransactionManager "
+                + "且都没标 @Primary；或多数据源下声明了多个 TransactionTemplate），"
                 + "创建用户的多条写入将不在同一事务中执行。修法：给其中一个 TransactionManager 标 @Primary，"
-                + "或自行声明一个 TransactionTemplate Bean");
+                + "或给其中一个 TransactionTemplate Bean 标 @Primary");
         return TransactionOperations.withoutTransaction();
     }
 
@@ -181,6 +189,12 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
      * 两层都锁同一把键会让所有带手机号/邮箱的建号请求必现"操作冲突"。
      */
     public SysUser createUser(SysUser user, String rawPassword, List<Long> roleIds) {
+        // 用户名为空时整条校验链全程静默：UniqueGuard 对空值按设计跳过加锁，
+        // findByUsername 的 username = NULL 恒不成立，最后由数据库的 NOT NULL 以 500 收场
+        // ——而这本是一个 400 的输入问题。同形的还有 roleCode / dictType / configKey。
+        if (!StringUtils.hasText(user.getUsername())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "用户名不能为空");
+        }
         if (!StringUtils.hasText(rawPassword)) {
             throw new BizException(ResultCode.BAD_REQUEST, "初始密码不能为空");
         }

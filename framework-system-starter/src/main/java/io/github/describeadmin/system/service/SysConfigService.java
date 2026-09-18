@@ -10,6 +10,7 @@ import io.github.describeadmin.system.autoconfigure.FrameworkSystemProperties;
 import io.github.describeadmin.system.entity.SysConfig;
 import io.github.describeadmin.system.mapper.SysConfigMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.io.Serializable;
 import java.util.Optional;
@@ -72,6 +73,10 @@ public class SysConfigService extends BaseService<SysConfigMapper, SysConfig> {
      *
      * <p>{@code selfId} 是当前正在创建/编辑的记录自身 id：新建时传 {@code null}
      * （不存在"自己"），编辑时传当前 id，排除"改别的字段但键名没变"这种误判。
+     *
+     * <p><b>调用方必须先保证 {@code configKey} 非空白</b>，理由同
+     * {@code SysRoleService.assertRoleCodeAvailable}：空值让 {@code config_key = NULL}
+     * 恒不成立，本方法会静默放行。
      */
     private void assertConfigKeyAvailable(Long selfId, String configKey) {
         SysConfig exist = getOne(new QueryWrapper<SysConfig>().eq("config_key", configKey), false);
@@ -80,9 +85,17 @@ public class SysConfigService extends BaseService<SysConfigMapper, SysConfig> {
         }
     }
 
+    /** 参数键不得为空白，理由（不校验就以 500 收场）同 {@code SysRoleService.requireRoleCode}。 */
+    private static void requireConfigKey(String configKey) {
+        if (!StringUtils.hasText(configKey)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "参数键名不能为空");
+        }
+    }
+
     /** 内置标记只能来自种子数据，API 新增的参数一律按自定义处理，忽略调用方传入的值。 */
     @Override
     public boolean save(SysConfig entity) {
+        requireConfigKey(entity.getConfigKey());
         return uniqueGuard.execute("sys:config:key", entity.getConfigKey(), () -> {
             assertConfigKeyAvailable(null, entity.getConfigKey());
             entity.setConfigType(null);
@@ -92,8 +105,15 @@ public class SysConfigService extends BaseService<SysConfigMapper, SysConfig> {
         });
     }
 
+    /**
+     * 编辑参数。{@code configKey} 为 {@code null} 表示"不改这个字段"；空白非 null
+     * 是显式想清空，而它是标识列，不允许为空（空串绕得过数据库的 {@code NOT NULL}）。
+     */
     @Override
     public boolean updateById(SysConfig entity) {
+        if (entity.getConfigKey() != null) {
+            requireConfigKey(entity.getConfigKey());
+        }
         return uniqueGuard.execute("sys:config:key", entity.getConfigKey(), () -> {
             if (entity.getConfigKey() != null) {
                 assertConfigKeyAvailable(entity.getId(), entity.getConfigKey());

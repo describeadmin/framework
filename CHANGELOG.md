@@ -88,6 +88,33 @@
   - `SysMenuService.save` / `updateById` 覆写，落库前把空白 `permCode` / `icon`
     归一为 `NULL`，从写入口消除空串。
   既有 `''` 脏数据无需迁移，前两层已兜底。
+- **逻辑删除的角色仍在下发权限点与菜单路由**。`SysRelationMapper` 的
+  `selectPermCodesByUserId` / `selectMenuIdsByUserId` 只过滤 `sys_menu.deleted`，
+  没过滤 `sys_role.deleted`。删除角色是 `sys_role` 的逻辑删除，`sys_user_role` 的关联行
+  照常保留（授权是重建语义），于是被删角色继续给原有用户授权。症状极难定位：同文件的
+  `selectRoleCodesByUserId` 本来就有这个条件，因此 `hasRole()` 立刻失效而
+  `hasAuthority()` 照过，看起来不像同一件事。两条 SQL 的子查询补 `JOIN sys_role` +
+  `r.deleted = 0`，与 `selectRoleCodesByUserId` / `selectDataScopesByUserId` 口径统一。
+- **菜单的 `path` / `component` 永远清不回 `NULL`**。`SysMenuService.updateById` 的
+  `clearColumnIfNull` 覆盖 5 个可空列，但 `normalizeBlankToNull` 只归一了 3 个，
+  前端清空后提交的空串走不到 null 分支。表现为"表单删空、提交，界面看起来清了，
+  刷新后旧值又回来"。
+- **菜单可空列清空在国产化库上报「无效的列类型」**。`UpdateWrapper.set(col, null)`
+  生成的是参数占位符而非字面量 `NULL`，框架不配 `jdbc-type-for-null`（那是全局开关，
+  会改变所有业务实体的 null 绑定），MyBatis 于是按 `JdbcType.OTHER` 调 `setNull`——
+  MySQL 接受，达梦 / 金仓直接拒绝。改用 `setSql(col + " = NULL")`。详见 `CLAUDE.md` §3.8。
+- **唯一标识为空时以 500 收场，而这是个 400 的输入问题**。`SysUserService.createUser`
+  （username）、`SysRoleService`（roleCode）、`SysDictTypeService`（dictType）、
+  `SysConfigService`（configKey）四处：值为空时 `UniqueGuard` 按设计跳过加锁、
+  `eq(col, null)` 生成恒不成立的 `col = NULL`，校验全程静默通过，最后由数据库的
+  `NOT NULL` 约束报 500，错误信息里没有任何东西指向"标识没填"。四处 `save` 补显式
+  非空校验返回 `BAD_REQUEST`；三处 `updateById` 的标识列 `null` 仍表示"不改这个字段"，
+  但**空白非 null 一律 400**——空串绕得过 `NOT NULL`，会真的把 `role_code = ''` 写进库。
+- **`SysUserService` 在多数据源下可能启动即失败**。构造期解析 `TransactionTemplate` 用了
+  `ObjectProvider.getIfAvailable()`，它在候选**多于一个**时抛
+  `NoUniqueBeanDefinitionException`——而"多数据源各配一个 `TransactionTemplate`"
+  恰恰是这段降级逻辑唯一该生效的场景。改用 `getIfUnique()`，"一个都没有"与
+  "有多个但无从选择"都落到降级分支（WARN + 无事务执行）。
 
 ## 0.2.1 (2026-09-02)
 

@@ -46,8 +46,8 @@ public class LockStartupValidator implements SmartInitializingSingleton {
             if (beanType == null) {
                 continue;
             }
-            // MetadataLookup 返回 null 的方法才会入选（返回 Boolean.FALSE 也会入选，
-            // 这是 MethodIntrospector 的约定，这里曾真的踩过）
+            // MetadataLookup 返回【非 null】的方法才会入选。Boolean.FALSE 同样是非 null，
+            // 一样会入选——所以下面不命中时必须返回 null 而不是 false，这里曾真的踩过。
             Map<Method, Boolean> annotated = MethodIntrospector.selectMethods(beanType,
                     (MethodIntrospector.MetadataLookup<Boolean>) method -> {
                         boolean bothMarked = AnnotatedElementUtils.hasAnnotation(method, DistributedLock.class)

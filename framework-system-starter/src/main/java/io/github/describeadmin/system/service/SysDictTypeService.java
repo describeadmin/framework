@@ -8,6 +8,7 @@ import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.system.entity.SysDictType;
 import io.github.describeadmin.system.mapper.SysDictTypeMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * 字典类型管理。数据本身没有缓存需求——变更频率低、被引用少，直接查表即可。
@@ -31,6 +32,10 @@ public class SysDictTypeService extends BaseService<SysDictTypeMapper, SysDictTy
      *
      * <p>{@code selfId} 是当前正在创建/编辑的记录自身 id：新建时传 {@code null}
      * （不存在"自己"），编辑时传当前 id，排除"改别的字段但类型没变"这种误判。
+     *
+     * <p><b>调用方必须先保证 {@code dictType} 非空白</b>，理由同
+     * {@code SysRoleService.assertRoleCodeAvailable}：空值让 {@code dict_type = NULL}
+     * 恒不成立，本方法会静默放行。
      */
     private void assertDictTypeAvailable(Long selfId, String dictType) {
         SysDictType exist = getOne(new QueryWrapper<SysDictType>().eq("dict_type", dictType), false);
@@ -39,16 +44,31 @@ public class SysDictTypeService extends BaseService<SysDictTypeMapper, SysDictTy
         }
     }
 
+    /** 字典类型编码不得为空白，理由（不校验就以 500 收场）同 {@code SysRoleService.requireRoleCode}。 */
+    private static void requireDictType(String dictType) {
+        if (!StringUtils.hasText(dictType)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "字典类型不能为空");
+        }
+    }
+
     @Override
     public boolean save(SysDictType entity) {
+        requireDictType(entity.getDictType());
         return uniqueGuard.execute("sys:dict:type", entity.getDictType(), () -> {
             assertDictTypeAvailable(null, entity.getDictType());
             return super.save(entity);
         });
     }
 
+    /**
+     * 编辑字典类型。{@code dictType} 为 {@code null} 表示"不改这个字段"；空白非 null
+     * 是显式想清空，而它是标识列，不允许为空（空串绕得过数据库的 {@code NOT NULL}）。
+     */
     @Override
     public boolean updateById(SysDictType entity) {
+        if (entity.getDictType() != null) {
+            requireDictType(entity.getDictType());
+        }
         return uniqueGuard.execute("sys:dict:type", entity.getDictType(), () -> {
             if (entity.getDictType() != null) {
                 assertDictTypeAvailable(entity.getId(), entity.getDictType());
