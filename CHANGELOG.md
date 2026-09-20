@@ -34,6 +34,15 @@
   （同类先例：`sys_user.mobile` / `sys_dept.ancestors` / `sys_role.home_path`）
 - （`SysRoleService.save/updateById` 现在会拒绝重复 `roleCode`——严格说这是
   新增校验而非破坏：此前连校验都没有，重复角色标识能正常落库，属于漏洞修复）
+- **`SysRoleService.assignMenus` 现在把入参闭包到全部祖先**，因此
+  `menuIdsOf(roleId)` 读回的 id **可能多于本次传入的 id**。直接调用该方法或
+  `PUT /api/system/role/{roleId}/menus` 的脚本与测试会看到这个差异。
+  此前这条不变量（「子菜单被授权时祖先也要在授权范围内」，否则前端生成不出路由）
+  靠前端提交半选的父节点维持，接口被直接调用时不成立。
+  由此还有一个语义后果：**只授某个按钮（如 `system:user:add`）会连带授出其父菜单的
+  `system:user:list`**——父菜单自己也带权限点。这在旧前端上早已如此，变的只是
+  「直接调接口」这条路径。存量数据一般无需处理，可选的补齐 SQL 见
+  `docs/CLAUDE.md` §4.5.2。
 
 ### New Features
 
@@ -68,6 +77,27 @@
 
 ### Bug Fixes
 
+- **「分配数据权限」把半选的父部门一并提交，造成数据权限越授**。前端
+  `submitAssignDept` 连 `getHalfCheckedKeys()` 一起交给后端，于是「只勾了几个子部门」
+  实际写进去的是「子部门 + 父部门」，角色因此能看到**父部门的业务数据**。
+  那段注释照搬自菜单树（「不交半选父节点会丢掉父级挂载点」），但部门树在这里根本
+  不用于渲染——`DeptDataPermissionHandler` 的 CUSTOM 档生成的是 `dept_id IN (...)`，
+  精确集合成员判定。授权树改 `check-strictly` 后半选不再产生，越授消失。
+  **存量 `sys_role_dept` 刻意不自动清理**：删掉已被带进去的父部门是缩小某个角色的
+  数据范围，静默缩权比静默扩权更难排查。随下一次保存自然收敛。
+- **角色授权树表达不出「只给列表权限」**。父 `MENU` 节点自己带
+  `<模块>:<对象>:list`，而 ElTree 默认父子联动模式下父节点的勾选态由子节点推导——
+  把某个菜单下的按钮全部取消，父节点也跟着灭，于是「看得到列表、不能增删改」这个
+  最常见的授权诉求做不到，且界面上看不出是做不到。两棵授权树改为 `check-strictly`
+  加手写单向级联（勾选补祖先带子孙、取消只带走子孙）。
+  原先「提交半选父节点 + 回填只取叶子」的一对补丁一并删除，它们自身还留了个盲区：
+  被授权、有子节点、但子节点全未授权的父节点，回填时会被丢掉——管理员打开弹窗
+  点一下「确定」就静默撤销了该授权。
+- **没填 `path` 的目录会让整棵子树从路由里消失**。前端 `toRouteRecords` 过去是
+  `filter + map`，不可路由的节点被跳过时它的 `children` 也一起丢了（子树只能经
+  父节点递归取得）。现改为把子节点**提升到本层**。`sys_menu` 没有任何校验要求 `DIR`
+  必须有 `path`，而 `normalizeBlankToNull` 会把空串归一成 `NULL`，所以这是合法输入；
+  在授权自动补齐祖先之后这条路径更容易被走到。
 - **系统模块并发唯一性漏洞（存量修复）**：`SysUserService`（用户名/手机号/邮箱，
   create + update + 自助改资料）、`SysConfigService`（configKey）、
   `SysDictTypeService`（dictType）的唯一性校验全部接入 `UniqueGuard`——

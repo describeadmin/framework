@@ -293,17 +293,36 @@ class SystemModuleIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
-    @DisplayName("角色授予菜单同样是重建语义")
-    void assignMenusIsRebuild() {
+    @DisplayName("角色授予菜单是重建语义，并且自动补齐全部祖先")
+    void assignMenusIsRebuildAndClosesOverAncestors() {
         SysRole role = newRole("ROLE_MENU", "菜单测试角色");
         List<Long> allMenuIds = menuService.list().stream().map(SysMenu::getId).toList();
         assertThat(allMenuIds).isNotEmpty();
 
+        // 重建而非累加：全量授权后再授一条，旧的必须被清掉
         roleService.assignMenus(role.getId(), allMenuIds);
         assertThat(roleService.menuIdsOf(role.getId())).hasSameSizeAs(allMenuIds);
 
-        roleService.assignMenus(role.getId(), List.of(allMenuIds.get(0)));
-        assertThat(roleService.menuIdsOf(role.getId())).containsExactly(allMenuIds.get(0));
+        // 闭包：只授最深的 BUTTON，读回必须是「自身 + 父 MENU + 父 DIR」三条。
+        // 缺了祖先前端就生成不出路由（子路由没有挂载点），所以这不是"多授"而是有效性要求。
+        Long addButton = menuIdOf("system:user:add");
+        Long userMenu = menuIdOf("system:user:list");
+        Long systemDir = menuService.getById(userMenu).getParentId();
+        assertThat(systemDir).as("用户管理应挂在「系统管理」目录下").isNotNull().isNotZero();
+
+        roleService.assignMenus(role.getId(), List.of(addButton));
+        assertThat(roleService.menuIdsOf(role.getId()))
+                .as("只授子节点时必须闭包到祖先")
+                .containsExactlyInAnyOrder(addButton, userMenu, systemDir);
+
+        // 根节点：闭包是空操作，且不能因为重复 id 撞上 sys_role_menu 的 (role_id, menu_id) 主键
+        roleService.assignMenus(role.getId(), List.of(systemDir));
+        assertThat(roleService.menuIdsOf(role.getId())).containsExactly(systemDir);
+
+        // 同时传父与子：去重后仍是两条
+        roleService.assignMenus(role.getId(), List.of(systemDir, userMenu));
+        assertThat(roleService.menuIdsOf(role.getId()))
+                .containsExactlyInAnyOrder(systemDir, userMenu);
     }
 
     @Test
@@ -457,6 +476,15 @@ class SystemModuleIT extends AbstractMySqlIntegrationTest {
         r.setSort(0);
         roleService.save(r);
         return r;
+    }
+
+    /** 按权限标识取种子菜单 id，同 {@code DataScopePermissionIT} 的同名方法。 */
+    private Long menuIdOf(String permCode) {
+        return menuService.list().stream()
+                .filter(m -> permCode.equals(m.getPermCode()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("种子数据缺少权限点: " + permCode))
+                .getId();
     }
 
     private static void assertNoButton(List<SysMenu> nodes) {

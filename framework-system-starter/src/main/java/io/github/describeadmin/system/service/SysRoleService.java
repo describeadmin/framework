@@ -29,10 +29,13 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
 
     private final SysRelationMapper relationMapper;
     private final UniqueGuard uniqueGuard;
+    private final SysMenuService menuService;
 
-    public SysRoleService(SysRelationMapper relationMapper, UniqueGuard uniqueGuard) {
+    public SysRoleService(SysRelationMapper relationMapper, UniqueGuard uniqueGuard,
+                          SysMenuService menuService) {
         this.relationMapper = relationMapper;
         this.uniqueGuard = uniqueGuard;
+        this.menuService = menuService;
     }
 
     /**
@@ -93,12 +96,26 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
         });
     }
 
-    /** 重新授予菜单权限：同样是"重建"语义。 */
+    /**
+     * 重新授予菜单权限："重建"语义，并且<b>把入参闭包到全部祖先</b>
+     * （见 {@link SysMenuService#withAncestors}）。
+     *
+     * <p>只授子节点、不授父节点是无效授权：前端按父子关系生成路由，父节点缺席时子路由
+     * 没有挂载点。此前靠前端提交半选的父节点兜住，那要求<b>每一个调用方都记得这件事</b>
+     * ——接口被直接调用时（脚本、集成测试、以后的开放接口）就不成立了。改为在唯一的
+     * 写入口闭包，库里存的直接就是事实，查表即真相。
+     *
+     * <p>因此 {@link #menuIdsOf} 读回的 id 可能<b>多于</b>本次传入的 id，<b>这是设计而非缺陷</b>。
+     * 由此还有一个语义后果：只授某个按钮（如 {@code system:user:add}）会连带授出其父菜单的
+     * {@code system:user:list}——父菜单自己也带权限点。这一点在旧前端提交半选父节点时
+     * 早已如此，变的只是"直接调接口"这条路径。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void assignMenus(Long roleId, List<Long> menuIds) {
+        List<Long> effective = menuService.withAncestors(menuIds);
         relationMapper.deleteRoleMenus(roleId);
-        if (menuIds != null && !menuIds.isEmpty()) {
-            relationMapper.insertRoleMenus(roleId, menuIds);
+        if (!effective.isEmpty()) {
+            relationMapper.insertRoleMenus(roleId, effective);
         }
     }
 
@@ -112,6 +129,13 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
      * <p>只在角色的 {@code dataScope = CUSTOM} 时有意义；对其余档位的角色调用本方法
      * 不会报错，但写入的部门列表在数据权限拦截器里不会被读取（见
      * {@code DeptDataPermissionHandler}），调用方自行保证 {@code data_scope} 已经是 CUSTOM。
+     *
+     * <p><b>⚠️ 刻意不做 {@link #assignMenus} 那样的祖先闭包，不要"补齐对称性"。</b>
+     * 两者的 id 语义根本不同：菜单 id 是树上的<b>挂载点</b>，子依赖父才能被渲染，
+     * 缺了父是坏数据；而这里的部门 id 是一个<b>行过滤值</b>——{@code DeptDataPermissionHandler}
+     * 的 CUSTOM 档生成的是 {@code dept_column IN (...)}，精确集合成员判定，不做任何展开
+     * （同类里的 {@code DEPT_AND_CHILD} 档才用 {@code FIND_IN_SET(..., ancestors)} 往下展开）。
+     * 给它补祖先等于<b>让角色多看见父部门的业务数据</b>，是越权而不是修复。
      */
     @Transactional(rollbackFor = Exception.class)
     public void assignDataScopeDepts(Long roleId, List<Long> deptIds) {

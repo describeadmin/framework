@@ -4,13 +4,17 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.common.api.TreeBuilder;
+import io.github.describeadmin.system.core.MenuAncestorClosure;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.mapper.SysMenuMapper;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** 菜单管理。 */
@@ -149,6 +153,31 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
                 .ne("menu_type", SysMenu.TYPE_BUTTON)
                 .orderByAsc("sort"));
         return toTree(routable);
+    }
+
+    /**
+     * 把给定菜单 id 闭包为「自身 + 全部祖先」，供角色授权使用。
+     *
+     * <p>只授子节点而不授父节点是<b>无效授权</b>：前端按父子关系生成路由，父节点缺席时
+     * 子路由没有挂载点。闭包放在唯一写入口（{@code SysRoleService.assignMenus}），
+     * 库里存的就是事实，{@link #treeOf} 等读取口径不必各自再补一次。
+     *
+     * <p><b>刻意不缓存</b>：菜单的父子关系可被「菜单管理」随时改，加缓存就要跟着加失效钩子
+     * （对照 {@code SysDictDataService}）；而授权是低频管理动作，一次几百行的两列查询
+     * 完全可以忽略。
+     *
+     * <p>{@code select("id", "parent_id")} 只取两列，{@code @TableLogic} 会自动追加
+     * {@code deleted = 0}——已逻辑删除的菜单不参与闭包，走到它那里即停。
+     */
+    public List<Long> withAncestors(Collection<Long> menuIds) {
+        if (menuIds == null || menuIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Long> parentById = new HashMap<>();
+        for (SysMenu menu : list(new QueryWrapper<SysMenu>().select("id", "parent_id"))) {
+            parentById.put(menu.getId(), menu.getParentId());
+        }
+        return MenuAncestorClosure.expand(menuIds, parentById);
     }
 
     private List<SysMenu> toTree(List<SysMenu> flat) {
