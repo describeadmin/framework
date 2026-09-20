@@ -20,7 +20,7 @@ public interface SysRelationMapper {
 
     @Select("SELECT r.role_code FROM sys_role r "
             + "JOIN sys_user_role ur ON ur.role_id = r.id "
-            + "WHERE ur.user_id = #{userId} AND r.deleted = 0 ORDER BY r.sort")
+            + "WHERE ur.user_id = #{userId} AND r.deleted = 0 ORDER BY r.sort, r.id")
     List<String> selectRoleCodesByUserId(@Param("userId") Long userId);
 
     @Select("SELECT ur.role_id FROM sys_user_role ur WHERE ur.user_id = #{userId}")
@@ -72,10 +72,15 @@ public interface SysRelationMapper {
      * 当前用户全部角色的数据权限范围与默认首页，供 {@code DataScopeResolver}/
      * {@code HomePathResolver} 合并。按 {@code sort} 升序——首页合并规则是
      * "取排序靠前且非空的第一个"，需要确定性顺序。
+     *
+     * <p><b>{@code r.id} 这个二级排序不能省。</b>{@code sort} 可以重复（默认值 0），
+     * 只按它排时同值角色谁在前由数据库自行决定：用户身兼两个 {@code sort} 相同、
+     * 又都配了 {@code home_path} 的角色时，登录后落哪个首页会在两次之间漂移，
+     * 而两次的数据、配置完全一样——症状不指向"排序没有唯一解"。
      */
     @Select("SELECT r.id AS role_id, r.data_scope AS data_scope, r.home_path AS home_path FROM sys_role r "
             + "JOIN sys_user_role ur ON ur.role_id = r.id "
-            + "WHERE ur.user_id = #{userId} AND r.deleted = 0 ORDER BY r.sort")
+            + "WHERE ur.user_id = #{userId} AND r.deleted = 0 ORDER BY r.sort, r.id")
     List<RoleScope> selectDataScopesByUserId(@Param("userId") Long userId);
 
     @Select("SELECT dept_id FROM sys_role_dept WHERE role_id = #{roleId}")

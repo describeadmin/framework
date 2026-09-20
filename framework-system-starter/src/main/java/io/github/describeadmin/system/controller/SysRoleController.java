@@ -37,12 +37,20 @@ public class SysRoleController extends BaseController<SysRoleService, SysRoleMap
 
     /**
      * 列表查询的筛选条件，见 {@link SysUserController#buildListWrapper} 同一处理方式。
+     *
+     * <p>按 {@code sort} 升序，与部门/菜单/字典数据一致（那三处在各自 Service 里排）。
+     * {@code sort} 不只是展示顺序：它决定多角色用户的默认首页由哪个角色胜出
+     * （见 {@code HomePathResolver}），列表不按它排会让"排序"这一列看起来毫无作用。
+     *
+     * <p>{@code id} 是二级排序，不能省——{@code sort} 允许重复（默认值 0），
+     * 只按它排时同值行的相对顺序由数据库自行决定，<b>翻页会重复或漏掉记录</b>。
      */
     @Override
     protected Wrapper<SysRole> buildListWrapper(Map<String, String> params) {
         QueryWrapper<SysRole> wrapper = new QueryWrapper<>();
         wrapper.likeRight(text(params, "roleName") != null, "role_name", text(params, "roleName"));
         wrapper.likeRight(text(params, "roleCode") != null, "role_code", text(params, "roleCode"));
+        wrapper.orderByAsc("sort", "id");
         return wrapper;
     }
 
