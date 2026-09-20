@@ -1,14 +1,18 @@
 package io.github.describeadmin.it;
 
 import io.github.describeadmin.common.api.BizException;
+import io.github.describeadmin.common.api.PageQuery;
+import io.github.describeadmin.common.api.PageResult;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.system.entity.SysConfig;
+import io.github.describeadmin.system.entity.SysDept;
 import io.github.describeadmin.system.entity.SysDictType;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.entity.SysRole;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
 import io.github.describeadmin.system.service.SysConfigService;
+import io.github.describeadmin.system.service.SysDeptService;
 import io.github.describeadmin.system.service.SysDictTypeService;
 import io.github.describeadmin.system.service.SysMenuService;
 import io.github.describeadmin.system.service.SysRoleService;
@@ -34,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SystemModuleFixesIT extends AbstractMySqlIntegrationTest {
 
     @Autowired SysUserService userService;
+    @Autowired SysDeptService deptService;
     @Autowired SysRoleService roleService;
     @Autowired SysMenuService menuService;
     @Autowired SysDictTypeService dictTypeService;
@@ -192,6 +197,51 @@ class SystemModuleFixesIT extends AbstractMySqlIntegrationTest {
     }
 
     // ----------------------------------------------------------- 空标识以 400 收场
+
+    @Nested
+    @DisplayName("用户列表带出部门名称")
+    class UserListDeptName {
+
+        @Test
+        @DisplayName("列表返回的 deptName 是部门的真实名称，未设部门的留 null")
+        void listCarriesDeptName() {
+            SysDept dept = new SysDept();
+            dept.setParentId(0L);
+            dept.setDeptName("部门名回归部");
+            dept.setSort(998);
+            dept.setStatus(1);
+            Long deptId = deptService.createDept(dept).getId();
+
+            SysUser withDept = new SysUser();
+            withDept.setUsername("regress-deptname-yes");
+            withDept.setNickname("有部门");
+            withDept.setDeptId(deptId);
+            userService.createUser(withDept, "P@ssw0rd-123", List.of());
+
+            SysUser withoutDept = new SysUser();
+            withoutDept.setUsername("regress-deptname-no");
+            withoutDept.setNickname("无部门");
+            userService.createUser(withoutDept, "P@ssw0rd-123", List.of());
+
+            PageQuery query = new PageQuery();
+            query.setCurrent(1);
+            query.setSize(500);
+            PageResult<SysUser> page = userService.page(query);
+
+            // 按具体值断言：deptName 是非持久化字段，只比对行数看不出它恒为 null（CLAUDE.md §3.6）
+            assertThat(page.getRecords())
+                    .filteredOn(u -> "regress-deptname-yes".equals(u.getUsername()))
+                    .singleElement()
+                    .extracting(SysUser::getDeptName)
+                    .isEqualTo("部门名回归部");
+            assertThat(page.getRecords())
+                    .filteredOn(u -> "regress-deptname-no".equals(u.getUsername()))
+                    .singleElement()
+                    .extracting(SysUser::getDeptName)
+                    .as("未设部门的用户不该被填成别人的部门")
+                    .isNull();
+        }
+    }
 
     @Nested
     @DisplayName("唯一标识为空返回 400 而不是 500")

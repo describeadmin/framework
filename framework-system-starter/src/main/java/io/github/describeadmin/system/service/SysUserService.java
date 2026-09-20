@@ -1,14 +1,19 @@
 package io.github.describeadmin.system.service;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.cache.api.UniqueGuard;
 import io.github.describeadmin.common.api.BizException;
+import io.github.describeadmin.common.api.PageQuery;
+import io.github.describeadmin.common.api.PageResult;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.security.api.PasswordPolicy;
 import io.github.describeadmin.security.api.TokenStore;
+import io.github.describeadmin.system.entity.SysDept;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.entity.SysUserPasswordHistory;
+import io.github.describeadmin.system.mapper.SysDeptMapper;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
 import io.github.describeadmin.system.mapper.SysUserMapper;
 import io.github.describeadmin.system.mapper.SysUserPasswordHistoryMapper;
@@ -23,7 +28,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /** 用户管理。 */
@@ -36,6 +45,7 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
     private static final String CFG_HISTORY_COUNT = "sys.password.history-count";
 
     private final SysRelationMapper relationMapper;
+    private final SysDeptMapper deptMapper;
     private final PasswordEncoder passwordEncoder;
     private final TokenStore tokenStore;
     private final PasswordPolicy passwordPolicy;
@@ -44,11 +54,13 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
     private final UniqueGuard uniqueGuard;
     private final TransactionOperations transactionOperations;
 
-    public SysUserService(SysRelationMapper relationMapper, PasswordEncoder passwordEncoder, TokenStore tokenStore,
+    public SysUserService(SysRelationMapper relationMapper, SysDeptMapper deptMapper,
+                          PasswordEncoder passwordEncoder, TokenStore tokenStore,
                           PasswordPolicy passwordPolicy, SysUserPasswordHistoryMapper passwordHistoryMapper,
                           SysConfigService configService, UniqueGuard uniqueGuard,
                           ObjectProvider<TransactionTemplate> transactionTemplateProvider) {
         this.relationMapper = relationMapper;
+        this.deptMapper = deptMapper;
         this.passwordEncoder = passwordEncoder;
         this.tokenStore = tokenStore;
         this.passwordPolicy = passwordPolicy;
@@ -89,6 +101,50 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
                 + "创建用户的多条写入将不在同一事务中执行。修法：给其中一个 TransactionManager 标 @Primary，"
                 + "或给其中一个 TransactionTemplate Bean 标 @Primary");
         return TransactionOperations.withoutTransaction();
+    }
+
+    /**
+     * 分页列表，并填充非持久化的 {@link SysUser#getDeptName()}。
+     *
+     * <p>{@code sys_user} 只存 {@code dept_id}，而列表要显示部门名称。不填的话
+     * {@code deptName} 恒为 {@code null}，前端「部门」列整列空白——<b>症状不指向真因</b>：
+     * 接口 200、其余列都正常、用户编辑弹窗里的部门也选得中，只是列表里看不见。
+     *
+     * <p>做法是按当页出现的 {@code dept_id} 去重后回查一次部门表，不写连表 SQL：
+     * 连表会绕开 {@code sys_user} 上的行级数据权限与 {@code @TableLogic}，
+     * 要在自定义 SQL 里把这两件事重写一遍。{@code sys_dept} 没有登记进数据权限
+     * （见 {@code FrameworkSystemAutoConfiguration} 只登记了 {@code sys_user}），
+     * 这次回查不会被过滤掉。
+     *
+     * <p>覆写的是 {@link BaseService#page(PageQuery, Wrapper)}，因此
+     * {@code BaseController} 的通用列表端点不必改动。
+     */
+    @Override
+    public PageResult<SysUser> page(PageQuery query, Wrapper<SysUser> wrapper) {
+        PageResult<SysUser> result = super.page(query, wrapper);
+        fillDeptName(result.getRecords());
+        return result;
+    }
+
+    /** 按 {@code deptId} 批量回填部门名称；部门已删除或未设部门的记录留 {@code null}。 */
+    private void fillDeptName(List<SysUser> users) {
+        Set<Long> deptIds = new HashSet<>();
+        for (SysUser user : users) {
+            if (user.getDeptId() != null) {
+                deptIds.add(user.getDeptId());
+            }
+        }
+        if (deptIds.isEmpty()) {
+            return;
+        }
+        Map<Long, String> nameById = new HashMap<>();
+        for (SysDept dept : deptMapper.selectList(
+                new QueryWrapper<SysDept>().select("id", "dept_name").in("id", deptIds))) {
+            nameById.put(dept.getId(), dept.getDeptName());
+        }
+        for (SysUser user : users) {
+            user.setDeptName(nameById.get(user.getDeptId()));
+        }
     }
 
     public SysUser findByUsername(String username) {

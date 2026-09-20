@@ -115,6 +115,16 @@
   `NoUniqueBeanDefinitionException`——而"多数据源各配一个 `TransactionTemplate`"
   恰恰是这段降级逻辑唯一该生效的场景。改用 `getIfUnique()`，"一个都没有"与
   "有多个但无从选择"都落到降级分支（WARN + 无事务执行）。
+- **用户列表的「部门」列恒为空白**。`SysUser.deptName` 是
+  `@TableField(exist = false)` 的展示字段，但全框架没有任何一处给它赋值——
+  用户列表走 `BaseController` 的通用端点直接返回实体，该字段永远是 `null`。
+  症状不指向真因：接口 200、其余列都正常、编辑弹窗里的部门也选得中，
+  只是列表里那一列整列空白，像前端没取到字段。`SysUserService` 覆写
+  `page(PageQuery, Wrapper)`，按当页出现的 `dept_id` 去重后回查一次
+  `sys_dept` 批量回填名称；不写连表 SQL，那会绕开 `sys_user` 上的行级数据权限与
+  `@TableLogic`。`sys_dept` 未登记进数据权限，回查不受过滤影响。
+  **构造函数新增 `SysDeptMapper` 参数**——`SysUserService` 不在 `api/` 包下，
+  不属兼容性承诺范围，但自行 `new` 过它的代码需要跟改。
 
 ## 0.2.1 (2026-09-02)
 

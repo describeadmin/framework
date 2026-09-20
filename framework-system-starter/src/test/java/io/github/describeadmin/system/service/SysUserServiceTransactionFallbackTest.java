@@ -60,7 +60,7 @@ class SysUserServiceTransactionFallbackTest {
      * 构造函数只做字段赋值与本次要验证的 provider 解析，不触碰其余依赖。
      */
     private static SysUserService newService(ObjectProvider<TransactionTemplate> provider) {
-        return new SysUserService(null, null, null, null, null, null, null, provider);
+        return new SysUserService(null, null, null, null, null, null, null, null, provider);
     }
 
     private static ObjectProvider<TransactionTemplate> providerWithTemplates(int count) {
