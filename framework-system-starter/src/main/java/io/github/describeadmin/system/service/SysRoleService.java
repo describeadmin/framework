@@ -3,6 +3,7 @@ package io.github.describeadmin.system.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.cache.api.UniqueGuard;
 import io.github.describeadmin.common.api.BizException;
+import io.github.describeadmin.common.api.OptionItem;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.system.entity.SysRole;
@@ -147,5 +148,33 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
 
     public List<Long> deptIdsOf(Long roleId) {
         return relationMapper.selectDeptIdsByRoleId(roleId);
+    }
+
+    /**
+     * 角色选项，供别的模块（用户管理的「角色」选择器）填下拉框。
+     *
+     * <p>取代过去的 {@code GET /api/system/role?current=1&size=200}：那是把分页接口
+     * 当全量接口使，角色超过 200 条就静默丢数据，而且不可能靠调大参数修好
+     * （{@code PageQuery.MAX_SIZE} 在入口夹紧）。约定见 CLAUDE.md 4.11。
+     *
+     * <p><b>{@code SysRole} 没有 {@code status} 字段</b>，所以这里不像
+     * {@link SysDeptService#listOptions} 那样标注禁用态——角色只有"存在 / 被逻辑删除"两种状态，
+     * 后者由 {@code @TableLogic} 自动排除。
+     *
+     * <p>只取 {@code id} 与 {@code role_name} 两列：选项接口的契约就是最小形状，
+     * 多带 {@code data_scope}/{@code home_path} 等字段等于把角色管理的内部结构
+     * 泄露给每一个登录用户。
+     *
+     * @param keyword 角色名前缀，可为空（返回全量）。无论传不传，超过
+     *                {@code OptionItem.MAX_SIZE} 都抛错而非截断
+     */
+    public List<OptionItem> listOptions(String keyword) {
+        QueryWrapper<SysRole> wrapper = new QueryWrapper<SysRole>()
+                .select("id", "role_name")
+                .likeRight(StringUtils.hasText(keyword), "role_name", keyword)
+                .orderByAsc("sort", "id");
+        return listOptionSource(wrapper, "角色").stream()
+                .map(r -> OptionItem.of(r.getId(), r.getRoleName()))
+                .toList();
     }
 }

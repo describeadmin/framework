@@ -2,6 +2,7 @@ package io.github.describeadmin.system.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import io.github.describeadmin.common.api.OptionItem;
 import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.common.api.TreeBuilder;
 import io.github.describeadmin.system.core.MenuAncestorClosure;
@@ -10,6 +11,7 @@ import io.github.describeadmin.system.mapper.SysMenuMapper;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -129,6 +131,40 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     /** 全量菜单树（管理端用）。 */
     public List<SysMenu> tree() {
         return toTree(list(new QueryWrapper<SysMenu>().orderByAsc("sort")));
+    }
+
+    /**
+     * 菜单选项树，供「上级菜单」这类引用选择器使用。
+     *
+     * <p>仅要求登录的引用数据端点（约定见 CLAUDE.md 4.11），所以只下发 id + 名称，
+     * 不带 {@code perm_code}/{@code component} —— 把权限点清单发给每一个登录用户，
+     * 等于公开了系统有哪些受控操作。
+     *
+     * <p><b>排除 {@code BUTTON}</b>：按钮不是可挂载的节点，既不能当上级菜单、也不能当首页。
+     * 需要含按钮的完整菜单树的是角色授权（「分配菜单」），那属于角色模块的功能数据，
+     * 走 {@code GET /api/system/role/grantable-menus} 并按 {@code system:role:list} 校验，
+     * 不从这里取。
+     *
+     * <p><b>刻意不按 {@code visible} 过滤</b>，理由同 {@link #treeOf}：隐藏菜单
+     * （独立的新增/编辑页）仍是真实存在的父节点，从「上级菜单」里滤掉它会让人
+     * 没有任何办法把子页面挂上去。
+     */
+    public List<OptionItem> listOptions() {
+        List<SysMenu> routable = listOptionSource(new QueryWrapper<SysMenu>()
+                .select("id", "parent_id", "menu_name")
+                .ne("menu_type", SysMenu.TYPE_BUTTON)
+                .orderByAsc("sort", "id"), "菜单");
+        return toOptions(toTree(routable));
+    }
+
+    private static List<OptionItem> toOptions(List<SysMenu> nodes) {
+        List<OptionItem> options = new ArrayList<>(nodes.size());
+        for (SysMenu node : nodes) {
+            OptionItem option = OptionItem.of(node.getId(), node.getMenuName());
+            option.getChildren().addAll(toOptions(node.getChildren()));
+            options.add(option);
+        }
+        return options;
     }
 
     /**

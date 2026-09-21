@@ -1,5 +1,6 @@
 package io.github.describeadmin.system.controller;
 
+import io.github.describeadmin.common.api.OptionItem;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.entity.SysDept;
@@ -54,5 +55,20 @@ public class SysDeptController extends BaseController<SysDeptService, SysDeptMap
     @GetMapping("/tree")
     public Result<List<SysDept>> tree() {
         return Result.ok(service.tree());
+    }
+
+    /**
+     * 部门选项树，供别的模块的选择器使用（用户管理的「部门」、角色管理的「分配数据权限」）。
+     *
+     * <p><b>仅需登录、不挂权限点</b>，理由与分档见
+     * {@link SysRoleController#options} 与 CLAUDE.md 4.11。{@link #tree()} 保留不动——
+     * 部门管理页自己用它，那是同模块访问，本来就闭环。
+     *
+     * <p>两者的差别是形状不是内容：本端点只下发 id + 名称 + 禁用态，
+     * 不含 {@code leader}/{@code phone}/{@code ancestors}。
+     */
+    @GetMapping("/options")
+    public Result<List<OptionItem>> options() {
+        return Result.ok(service.listOptions());
     }
 }

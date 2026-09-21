@@ -2,6 +2,7 @@ package io.github.describeadmin.system.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import io.github.describeadmin.common.api.BizException;
+import io.github.describeadmin.common.api.OptionItem;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.common.api.TreeBuilder;
@@ -10,6 +11,7 @@ import io.github.describeadmin.system.mapper.SysDeptMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -27,6 +29,40 @@ public class SysDeptService extends BaseService<SysDeptMapper, SysDept> {
     public List<SysDept> tree() {
         List<SysDept> all = list(new QueryWrapper<SysDept>().orderByAsc("sort"));
         return TreeBuilder.build(all, SysDept::getId, SysDept::getParentId, SysDept::getChildren);
+    }
+
+    /**
+     * 部门选项树，供别的模块（用户管理的「部门」选择器、角色管理的「分配数据权限」）使用。
+     *
+     * <p>与 {@link #tree()} 的区别是形状而非内容：这里只下发 id + 名称 + 禁用态，
+     * 不带 {@code leader}/{@code phone}/{@code ancestors}。因为它是<b>仅要求登录</b>的
+     * 引用数据端点（约定见 CLAUDE.md 4.11），下发负责人姓名与联系电话超出了"填个下拉框"
+     * 该有的授权范围。
+     *
+     * <p><b>停用的部门标记为 {@code disabled} 而不是过滤掉。</b> 直接滤掉的话，
+     * 已经在该部门下的用户一打开编辑表单，部门就显示为空——看起来像"这个人没有部门"，
+     * 保存一次就真的没有了。停用的语义是"不能再选它"，不是"它不存在"。
+     *
+     * <p>不接受 {@code keyword}：树必须完整才能渲染，过滤掉中间层会让子节点失去挂载点。
+     */
+    public List<OptionItem> listOptions() {
+        List<SysDept> all = listOptionSource(new QueryWrapper<SysDept>()
+                .select("id", "parent_id", "dept_name", "status")
+                .orderByAsc("sort", "id"), "部门");
+        return toOptions(TreeBuilder.build(
+                all, SysDept::getId, SysDept::getParentId, SysDept::getChildren));
+    }
+
+    private static List<OptionItem> toOptions(List<SysDept> nodes) {
+        List<OptionItem> options = new ArrayList<>(nodes.size());
+        for (SysDept node : nodes) {
+            // status：1 启用 / 0 禁用（schema-rbac.sql）。null 按启用处理，与列的 DEFAULT 1 一致
+            OptionItem option = OptionItem.of(node.getId(), node.getDeptName(),
+                    node.getStatus() != null && node.getStatus() == 0);
+            option.getChildren().addAll(toOptions(node.getChildren()));
+            options.add(option);
+        }
+        return options;
     }
 
     /** 创建部门，按父部门推算 {@code ancestors}。 */

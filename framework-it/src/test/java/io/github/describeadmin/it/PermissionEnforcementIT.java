@@ -146,6 +146,131 @@ class PermissionEnforcementIT extends AbstractMySqlIntegrationTest {
                 .isEqualTo(HttpStatus.OK);
     }
 
+    // ------------------------------------------- 跨模块引用数据（/options，CLAUDE.md 4.11）
+
+    /**
+     * A 档「引用元数据」端点只要求登录。
+     *
+     * <p>这一条是整套约定成立与否的关键：用户管理页要填「角色」「部门」两个选择器，
+     * 过去只能去调 {@code /api/system/role} 与 {@code /api/system/dept/tree}，
+     * 于是只授「用户管理」的角色必然 403，而补授对方的 {@code :list} 又会让侧边栏
+     * 多出不该有的管理入口。这里用<b>一个角色都没有</b>的账号验证，
+     * 比"只授 system:user:*"更强——连一个权限点都没有也应当拿得到。
+     */
+    @Test
+    @DisplayName("无角色账号能取到 /options 引用数据——跨模块下拉不再需要对方的 list 权限")
+    void optionEndpointsRequireOnlyLogin() {
+        String token = tokenOfPowerlessUser("nobody-options");
+
+        for (String path : List.of("/api/system/role/options",
+                "/api/system/dept/options", "/api/system/menu/options")) {
+            assertThat(rest.exchange(path, HttpMethod.GET,
+                    new HttpEntity<>(bearer(token)), String.class).getStatusCode())
+                    .as("仅登录即可访问: " + path)
+                    .isEqualTo(HttpStatus.OK);
+        }
+    }
+
+    /**
+     * 只比对状态码不够——放行的同时必须确认下发的<b>确实是</b>最小形状。
+     *
+     * <p>若哪天有人图省事把 {@code listOptions()} 改成直接返回实体，测试照样全绿，
+     * 而实际效果是把角色标识、部门负责人电话、全部权限点清单发给了每一个登录用户。
+     * 所以这里既断言"该有的值在"（顺带覆盖 CLAUDE.md 3.6 的字符集口径），
+     * 也断言"不该有的字段不在"。
+     */
+    @Test
+    @DisplayName("/options 只下发 id + 显示名，不夹带模块内部字段")
+    void optionEndpointsExposeOnlyMinimalShape() {
+        HttpEntity<Void> req = new HttpEntity<>(bearer(tokenOfPowerlessUser("nobody-shape")));
+
+        String roles = rest.exchange("/api/system/role/options", HttpMethod.GET, req, String.class).getBody();
+        assertThat(roles).contains("\"label\":\"超级管理员\"");
+        // 断言的是**字段名**不存在，而不是某个取值不出现在正文里：整个容器由全部 IT 共用，
+        // 别的用例建的角色名里就含 "ADMIN"（DataScopePermissionIT 的 ROLE_SCOPE_ALL_NOT_ADMIN），
+        // 按取值断言会因为一个合法的 label 而误报
+        assertThat(roles).as("roleCode / 数据权限档位 / 首页都是授权内部结构，不该下发")
+                .doesNotContain("roleCode")
+                .doesNotContain("dataScope")
+                .doesNotContain("homePath");
+
+        String depts = rest.exchange("/api/system/dept/options", HttpMethod.GET, req, String.class).getBody();
+        assertThat(depts).contains("\"label\":\"总部\"");
+        assertThat(depts).as("负责人/电话/物化路径都超出了\"填个下拉框\"该有的范围")
+                .doesNotContain("leader").doesNotContain("phone").doesNotContain("ancestors");
+
+        String menus = rest.exchange("/api/system/menu/options", HttpMethod.GET, req, String.class).getBody();
+        assertThat(menus).contains("\"label\":\"用户管理\"");
+        assertThat(menus).as("把权限点清单发给每个登录用户，等于公开系统有哪些受控操作")
+                .doesNotContain("permCode").doesNotContain("system:user:add");
+    }
+
+    /**
+     * A 档放行不等于变相放权——同一个账号对真正的管理端点必须仍然被拒。
+     *
+     * <p>没有这一条，「只要求登录」就可能被实现成「把这些模块整体放开」而无人察觉。
+     */
+    @Test
+    @DisplayName("能取 /options 的账号，对应模块的管理端点仍然 403")
+    void optionEndpointsDoNotWidenAccess() {
+        String token = tokenOfPowerlessUser("nobody-still-denied");
+
+        for (String path : List.of("/api/system/role", "/api/system/dept/tree",
+                "/api/system/menu/tree")) {
+            assertThat(rest.exchange(path, HttpMethod.GET,
+                    new HttpEntity<>(bearer(token)), String.class).getStatusCode())
+                    .as("/options 放行不应波及管理端点: " + path)
+                    .isEqualTo(HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /**
+     * 「仅登录」的底座是过滤链的 {@code anyRequest().authenticated()}——
+     * 这些端点<b>没有</b>写进 {@code BUILT_IN_PERMIT_ALL}，所以未登录必须拿不到。
+     *
+     * <p>不写这条的话，将来有人"为了方便"把 {@code /options} 加进
+     * {@code describeadmin.security.permit-all}，就成了不需要登录的全量组织架构导出接口。
+     */
+    @Test
+    @DisplayName("未登录访问 /options 得到 401，不是匿名可读")
+    void optionEndpointsRejectAnonymous() {
+        for (String path : List.of("/api/system/role/options",
+                "/api/system/dept/options", "/api/system/menu/options")) {
+            assertThat(rest.getForEntity(path, String.class).getStatusCode())
+                    .as("未登录不应拿到任何引用数据: " + path)
+                    .isEqualTo(HttpStatus.UNAUTHORIZED);
+        }
+    }
+
+    /**
+     * B 档「功能自带数据」按<b>宿主模块</b>的权限点校验。
+     *
+     * <p>「分配菜单」是角色管理自己的功能，它需要的完整菜单树由角色模块提供、
+     * 按 {@code system:role:list} 校验——而不是去调菜单模块的 {@code /tree}
+     * 再要求 {@code system:menu:list}。判据见 CLAUDE.md 4.11：
+     * 通用 OptionItem 形状够用走 A 档，不够用（这里要 menuType/path）走 B 档。
+     */
+    @Test
+    @DisplayName("/role/grantable-menus 按角色模块权限点校验，且含按钮节点")
+    void grantableMenusIsGuardedByRolePermission() {
+        assertThat(rest.exchange("/api/system/role/grantable-menus", HttpMethod.GET,
+                new HttpEntity<>(bearer(tokenOfPowerlessUser("nobody-grant"))), String.class)
+                .getStatusCode())
+                .as("无 system:role:list 应被拒")
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        ResponseEntity<String> asAdmin = rest.exchange("/api/system/role/grantable-menus",
+                HttpMethod.GET, new HttpEntity<>(bearer(tokenOfAdmin())), String.class);
+        assertThat(asAdmin.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // 授权树必须能勾到 BUTTON 级权限点，所以这棵树与 /menu/options 不同，是全量的
+        assertThat(asAdmin.getBody())
+                .as("授权树要含按钮节点，否则勾不到 add/edit/remove")
+                .contains("system:user:add");
+        assertThat(asAdmin.getBody())
+                .as("「首页」选择器要靠 menuType/path 判断哪些节点可选")
+                .contains("menuType").contains("path");
+    }
+
     // ------------------------------------------------------------------ 工具
 
     /**

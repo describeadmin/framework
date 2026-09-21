@@ -1,5 +1,6 @@
 package io.github.describeadmin.system.controller;
 
+import io.github.describeadmin.common.api.OptionItem;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.mybatis.api.BaseController;
 import io.github.describeadmin.system.entity.SysMenu;
@@ -33,5 +34,21 @@ public class SysMenuController extends BaseController<SysMenuService, SysMenuMap
     @GetMapping("/tree")
     public Result<List<SysMenu>> tree() {
         return Result.ok(service.tree());
+    }
+
+    /**
+     * 菜单选项树，供「上级菜单」这类引用选择器使用。
+     *
+     * <p><b>仅需登录、不挂权限点</b>，理由与分档见
+     * {@link SysRoleController#options} 与 CLAUDE.md 4.11。只下发 id + 名称，
+     * <b>不含按钮节点、不含 {@code permCode}</b>——把权限点清单发给每个登录用户，
+     * 等于公开系统有哪些受控操作。
+     *
+     * <p>需要含按钮的完整树的是角色授权，走
+     * {@link SysRoleController#grantableMenus}，不从这里取。
+     */
+    @GetMapping("/options")
+    public Result<List<OptionItem>> options() {
+        return Result.ok(service.listOptions());
     }
 }

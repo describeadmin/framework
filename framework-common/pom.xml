@@ -24,6 +24,17 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
+    <!--
+      仅测试用。本模块的编译期只需要 jackson-annotations（注解本身），
+      但 PageResult/OptionItem 上那几个注解的价值恰恰在于「序列化出来长什么样」——
+      @JsonInclude 写错了照样编译通过，只有真跑一遍 ObjectMapper 才看得出来。
+      运行时的 databind 由业务方的 spring-boot-starter-web 提供，核心不传递它。
+    -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
