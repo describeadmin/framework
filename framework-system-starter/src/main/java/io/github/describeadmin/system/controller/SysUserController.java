@@ -121,8 +121,16 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         return Result.ok(service.getById(id));
     }
 
+    /**
+     * 重置他人密码。
+     *
+     * <p><b>权限点是专用的 {@code system:user:reset-password}，不要"简化"成 {@code :edit}。</b>
+     * {@code seed-rbac.sql} 把它登记成了独立的 BUTTON，授权树上是一个独立的勾；若这里校验
+     * {@code :edit}，那个勾勾不勾都一样，而授了"编辑"就等于连带授出了改他人密码的能力——
+     * 界面上看不出来，是静默的扩权。
+     */
     @OperLog(module = "system:user", description = "重置密码")
-    @PreAuthorize("hasAuthority('system:user:edit')")
+    @PreAuthorize("hasAuthority('system:user:reset-password')")
     @PutMapping("/{userId}/password")
     public Result<Void> resetPassword(@PathVariable Long userId, @RequestBody Map<String, String> body) {
         service.resetPassword(userId, body.get("password"));
@@ -135,9 +143,13 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         return Result.ok(service.roleIdsOf(userId));
     }
 
-    /** 重新授予角色。整体覆盖而非增量修改。 */
+    /**
+     * 重新授予角色。整体覆盖而非增量修改。
+     *
+     * <p>权限点是专用的 {@code system:user:assign-role}，理由同 {@link #resetPassword}。
+     */
     @OperLog(module = "system:user", description = "分配角色")
-    @PreAuthorize("hasAuthority('system:user:edit')")
+    @PreAuthorize("hasAuthority('system:user:assign-role')")
     @PutMapping("/{userId}/roles")
     public Result<Void> assignRoles(@PathVariable Long userId, @RequestBody List<Long> roleIds) {
         service.assignRoles(userId, roleIds);

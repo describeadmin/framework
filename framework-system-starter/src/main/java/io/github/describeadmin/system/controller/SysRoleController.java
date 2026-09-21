@@ -109,9 +109,16 @@ public class SysRoleController extends BaseController<SysRoleService, SysRoleMap
         return Result.ok(service.menuIdsOf(roleId));
     }
 
-    /** 重新授予菜单权限。整体覆盖而非增量修改，与授权的"重建"语义一致。 */
+    /**
+     * 重新授予菜单权限。整体覆盖而非增量修改，与授权的"重建"语义一致。
+     *
+     * <p><b>权限点是专用的 {@code system:role:assign-menu}，不要"简化"成 {@code :edit}。</b>
+     * 它在 {@code seed-rbac.sql} 里是独立的 BUTTON，与旁边的 {@code :assign-dept} 同级；
+     * 校验 {@code :edit} 会让那个勾形同虚设，且「能改角色名」与「能给角色发权限」是两件
+     * 完全不同量级的事。
+     */
     @OperLog(module = "system:role", description = "分配菜单")
-    @PreAuthorize("hasAuthority('system:role:edit')")
+    @PreAuthorize("hasAuthority('system:role:assign-menu')")
     @PutMapping("/{roleId}/menus")
     public Result<Void> assignMenus(@PathVariable Long roleId, @RequestBody List<Long> menuIds) {
         service.assignMenus(roleId, menuIds);

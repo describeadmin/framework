@@ -44,6 +44,21 @@
   「直接调接口」这条路径。存量数据一般无需处理，可选的补齐 SQL 见
   `docs/CLAUDE.md` §4.5.2。
 
+- **三个端点的权限点由 `:edit` 改为各自专用的权限点**，与 `seed-rbac.sql` 早已登记的
+  BUTTON 对齐：
+
+  | 端点 | 原权限点 | 现权限点 |
+  |---|---|---|
+  | `PUT /api/system/user/{userId}/password`（重置密码） | `system:user:edit` | `system:user:reset-password` |
+  | `PUT /api/system/user/{userId}/roles`（分配角色） | `system:user:edit` | `system:user:assign-role` |
+  | `PUT /api/system/role/{roleId}/menus`（分配菜单） | `system:role:edit` | `system:role:assign-menu` |
+
+  此前这三个权限点**登记了但从未被校验**：授权树上勾不勾都一样，而授了 `:edit`
+  就等于连带授出了改他人密码 / 分配角色 / 给角色发权限——静默扩权。
+  **不需要任何数据迁移**（三个 `perm_code` 已在 `seed-rbac.sql` 里，ADMIN 已全量授权）；
+  业主自建的、只授了 `:edit` 的角色会失去这三项能力，在「分配菜单」里补勾对应按钮即可，
+  勾选后需重新登录才生效（权限快照在登录时定格）。
+
 ### New Features
 
 - **`LockOperations` 锁 SPI**（`framework-cache-starter`）：`tryLock`（快速失败）/
