@@ -13,6 +13,9 @@ import java.lang.annotation.Target;
  * <b>自定义</b>写端点（如 {@code SysUserController.resetPassword}）——
  * 与自定义端点用 {@code @PreAuthorize} 显式声明权限点是同一套心智模型：
  * 框架托底通用路径，自定义路径显式声明。
+ *
+ * <p>覆写 create/update/delete 时也可以标注，用来换掉默认的"{@code <模块> 编辑}"描述：
+ * 标了注解的方法只走注解这一条记录路径，不会和通用路径各记一条（见 {@code OperLogAspect}）。
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)

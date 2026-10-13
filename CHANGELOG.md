@@ -133,6 +133,21 @@
 
 ### Bug Fixes
 
+- **编辑一次用户落两条操作日志**（`system:user 编辑` + `更新用户`，0.2.0 起）。
+  `SysUserController.update` 覆写了 `BaseController.update` 又标了 `@OperLog`，
+  `OperLogAspect` 的通用切点与注解切点同时命中。两条切点的互斥此前只靠"覆写方法别标注解"
+  的约定，现在由切点本身保证：通用切点排除标有 `@OperLog` 的方法，覆写方法标了注解就只记
+  注解那一条、描述取注解。业务方覆写 create/update/delete 时标 `@OperLog` 也因此安全。
+  框架内只有这一处触发。存量库里的重复行不自动清理（审计数据由业主决定），要清的话，
+  0.2.0 / 0.2.1 期间 `PUT /api/system/user/{id}` 只会经过覆写方法，通用路径那条全是重复
+  （**先把 `DELETE` 换成 `SELECT *` 看结果**）：
+
+  ```sql
+  DELETE FROM sys_oper_log
+  WHERE module = 'system:user' AND description = 'system:user 编辑'
+    AND http_method = 'PUT' AND request_url LIKE '/api/system/user/%';
+  ```
+
 - 操作日志记录到 `MultipartFile` 参数时，只记文件名和大小。此前 Jackson 会调 `getBytes()`，
   把整个文件转成 base64 写进 `sys_oper_log`，或者在 `getInputStream()` 上直接序列化失败。
 - 上传超过 `spring.servlet.multipart.max-file-size` 时返回 `40000`「上传文件超过大小限制」，

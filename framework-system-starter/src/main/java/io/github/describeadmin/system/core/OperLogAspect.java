@@ -40,9 +40,13 @@ import java.util.Map;
  *
  * <p>覆写了 create/update/delete 的子类（如 {@code SysDeptController}）<b>不需要</b>
  * 额外标注——AspectJ 的 {@code execution(Type+.method(..))} 按方法签名匹配整个类型层级，
- * 覆写不会让它从"这是一次 BaseController.create() 执行"里消失。反过来说，
- * 这也是为什么这两条路径的 pointcut 必须互斥（后者只匹配自定义方法名），
- * 否则覆写方法会被重复记两条。
+ * 覆写不会让它从"这是一次 BaseController.create() 执行"里消失。
+ *
+ * <p><b>两条路径由 pointcut 本身保证互斥</b>：通用路径排除了标有 {@link OperLog} 的方法，
+ * 于是覆写方法上再标 {@code @OperLog}（如 {@code SysUserController.update} 想要
+ * "更新用户"这个描述）时只走注解路径，注解里的描述生效。不要把这条排除去掉——
+ * 以前互斥只靠"覆写方法别标注解"的约定，{@code SysUserController.update} 一标，
+ * 编辑一次用户就落两条日志。业务方覆写时同样可能标注解，约定挡不住，只能由切点挡。
  *
  * <p>日志写入失败只记 {@code slf4j} 错误、绝不向上抛出——记录一次操作失败了，
  * 不该连带把真正的业务操作也拖下水。
@@ -67,9 +71,10 @@ public class OperLogAspect {
         this.objectMapper = objectMapper;
     }
 
-    @Around("execution(* io.github.describeadmin.mybatis.api.BaseController+.create(..)) || "
+    @Around("(execution(* io.github.describeadmin.mybatis.api.BaseController+.create(..)) || "
             + "execution(* io.github.describeadmin.mybatis.api.BaseController+.update(..)) || "
-            + "execution(* io.github.describeadmin.mybatis.api.BaseController+.delete(..))")
+            + "execution(* io.github.describeadmin.mybatis.api.BaseController+.delete(..))) "
+            + "&& !@annotation(io.github.describeadmin.system.core.OperLog)")
     public Object aroundBaseControllerWrite(ProceedingJoinPoint joinPoint) throws Throwable {
         String module = permPrefixOf(joinPoint.getTarget());
         String description = module + " " + actionWord(joinPoint.getSignature().getName());
