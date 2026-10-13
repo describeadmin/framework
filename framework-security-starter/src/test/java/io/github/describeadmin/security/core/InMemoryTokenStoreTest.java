@@ -54,6 +54,20 @@ class InMemoryTokenStoreTest {
     }
 
     @Test
+    @DisplayName("每条会话带由令牌派生的 sessionId，彼此不同且不等于令牌")
+    void sessionIdIsDerivedFromToken() {
+        String a = store.issue(user(1L, "admin", "超级管理员"));
+        String b = store.issue(user(1L, "admin", "超级管理员"));
+
+        // 在线用户页靠它标出「当前」会话：与 ActiveSession.sessionIdOf(请求令牌) 对得上才行
+        assertThat(store.listActive())
+                .extracting(ActiveSession::getSessionId)
+                .containsExactlyInAnyOrder(ActiveSession.sessionIdOf(a), ActiveSession.sessionIdOf(b))
+                .doesNotContain(a, b)
+                .doesNotHaveDuplicates();
+    }
+
+    @Test
     @DisplayName("登出后从在线列表中消失")
     void revokedTokenDisappears() {
         String token = store.issue(user(1L, "admin", "超级管理员"));

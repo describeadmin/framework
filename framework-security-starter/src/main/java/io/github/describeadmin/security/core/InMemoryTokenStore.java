@@ -181,7 +181,8 @@ public class InMemoryTokenStore implements TokenStore {
     public List<ActiveSession> listActive() {
         Instant now = Instant.now();
         List<ActiveSession> sessions = new ArrayList<>();
-        for (Entry entry : tokens.values()) {
+        for (Map.Entry<String, Entry> e : tokens.entrySet()) {
+            Entry entry = e.getValue();
             // 不返回已过期但尚未被清理掉的条目——惰性清理意味着它们可能还在 map 里，
             // 但它们已经不能用于认证，列进"在线用户"会让管理员看到并不存在的会话
             if (entry.expiresAt().isBefore(now)) {
@@ -189,7 +190,8 @@ public class InMemoryTokenStore implements TokenStore {
             }
             LoginUser user = entry.user();
             SessionMeta meta = entry.meta() == null ? SessionMeta.EMPTY : entry.meta();
-            sessions.add(new ActiveSession(user.getUserId(), user.getUsername(),
+            sessions.add(new ActiveSession(ActiveSession.sessionIdOf(e.getKey()),
+                    user.getUserId(), user.getUsername(),
                     user.getNickname(), user.getAuthType(),
                     entry.issuedAt(), entry.expiresAt(), meta.getIp(), meta.getDevice()));
         }

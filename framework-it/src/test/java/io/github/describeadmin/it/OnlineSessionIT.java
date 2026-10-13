@@ -49,6 +49,23 @@ class OnlineSessionIT extends AbstractMySqlIntegrationTest {
     }
 
     @Test
+    @DisplayName("同一账号多个会话时，只有发起请求的那条标为 current")
+    @SuppressWarnings("unchecked")
+    void onlyRequestingSessionIsCurrent() {
+        // 同一账号登录两次 = 两个浏览器（或同一浏览器没登出就重新登录）
+        String first = tokenOfAdmin();
+        String second = tokenOfAdmin();
+
+        String currentOfFirst = currentSessionIdSeenBy(first);
+        String currentOfSecond = currentSessionIdSeenBy(second);
+
+        assertThat(currentOfFirst).isNotBlank();
+        assertThat(currentOfSecond).isNotBlank()
+                .as("两个会话各自看到的「当前」必须是自己那条，而不是按用户粒度标")
+                .isNotEqualTo(currentOfFirst);
+    }
+
+    @Test
     @DisplayName("登录时的 IP 与设备写进会话，在线列表里能看到")
     void loginSourceIsRecorded() {
         HttpHeaders headers = new HttpHeaders();
@@ -147,6 +164,22 @@ class OnlineSessionIT extends AbstractMySqlIntegrationTest {
     }
 
     // ------------------------------------------------------------------ 工具
+
+    /** 用该令牌拉全量在线列表，断言恰好一条 current，返回它的 sessionId。 */
+    @SuppressWarnings("unchecked")
+    private String currentSessionIdSeenBy(String token) {
+        ResponseEntity<Map> resp = rest.exchange("/api/system/online?size=500", HttpMethod.GET,
+                new HttpEntity<>(bearer(token)), Map.class);
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<String, Object>> records = (List<Map<String, Object>>)
+                ((Map<String, Object>) resp.getBody().get("data")).get("records");
+        List<Map<String, Object>> current = records.stream()
+                .filter(r -> Boolean.TRUE.equals(r.get("current")))
+                .toList();
+        assertThat(current).as("恰好一条会话是当前会话").hasSize(1);
+        assertThat(current.get(0).get("username")).isEqualTo("admin");
+        return (String) current.get(0).get("sessionId");
+    }
 
     private HttpStatus meStatus(String token) {
         return (HttpStatus) rest.exchange("/api/auth/me", HttpMethod.GET,

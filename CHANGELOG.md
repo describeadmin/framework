@@ -130,6 +130,16 @@
   取框架的 `describeadmin.lock.key-prefix`（不叠加插件自己的缓存前缀），
   内存/Redis 两实现产出完全相同的键名，替换实现不改变锁语义。
   `REQUIRED_FRAMEWORK_VERSION` 上调至 `0.2.2`（锁 SPI 的引入版本）。
+- **在线用户页标出「当前」会话**。同一账号多浏览器登录、或同一浏览器没登出就重新登录，
+  列表里会有多条同名会话，此前分不出哪条是自己正在用的。`GET /api/system/online`
+  的每条记录新增 `sessionId` 与 `current`：`sessionId` 是令牌的 SHA-256 摘要（前 128 位），
+  不是令牌本身，「列表绝不带出令牌」的约束不变；`current` 由服务端比对请求令牌的摘要得出。
+  `api/` 只增不改：`ActiveSession` 新增 `getSessionId()`、带 `sessionId` 的构造器与静态
+  `sessionIdOf(token)`，旧构造器保留——业务方自定义的 `TokenStore` 不改也能编译，
+  只是 `sessionId` 为 null、没有任何一条会被标为当前。`InMemoryTokenStore` 与
+  `framework-cache-redis-starter` 的 `RedisTokenStore` 已提供（插件仍要求框架 0.2.2，不变）。
+  前端顺带把表格 `row-key` 从不唯一的 `userId` 换成 `sessionId`；对自己所属账号点
+  「强制下线」时确认框会提示当前登录也会失效。
 
 ### Bug Fixes
 

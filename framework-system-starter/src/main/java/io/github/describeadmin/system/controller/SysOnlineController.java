@@ -1,11 +1,14 @@
 package io.github.describeadmin.system.controller;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import io.github.describeadmin.common.api.PageQuery;
 import io.github.describeadmin.common.api.PageResult;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.security.api.ActiveSession;
 import io.github.describeadmin.security.api.TokenStore;
+import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.system.core.OperLog;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,14 +54,19 @@ public class SysOnlineController {
      *
      * <p>排序沿用 {@link TokenStore#listActive()} 的约定：最近登录的在前。
      *
+     * <p>发起本次请求的那条会话标 {@code current = true}：比对的是当前请求令牌的
+     * {@link ActiveSession#sessionIdOf 摘要}，同一账号的其他会话（别的浏览器、
+     * 同一浏览器里没登出就重新登录留下的旧令牌）都是 {@code false}。
+     * {@code TokenStore} 实现未提供 {@link ActiveSession#getSessionId()} 时没有任何一条会被标出。
+     *
      * <p>{@code username} 过滤在应用层做（子串匹配，不区分大小写）——数据源是
      * {@link TokenStore#listActive()} 的内存快照，没有数据库表可下推 SQL 条件，
      * 与本类分页在应用层做是同一个理由。
      */
     @PreAuthorize("hasAuthority('system:online:list')")
     @GetMapping
-    public Result<PageResult<ActiveSession>> list(PageQuery query,
-            @RequestParam(required = false) String username) {
+    public Result<PageResult<OnlineSessionView>> list(PageQuery query,
+            @RequestParam(required = false) String username, HttpServletRequest request) {
         List<ActiveSession> all = tokenStore.listActive();
         if (username != null && !username.isBlank()) {
             String keyword = username.trim().toLowerCase();
@@ -70,8 +78,12 @@ public class SysOnlineController {
         long total = all.size();
         int from = (int) Math.min((query.getCurrent() - 1) * query.getSize(), total);
         int to = (int) Math.min(from + query.getSize(), total);
-        return Result.ok(new PageResult<>(
-                all.subList(from, to), total, query.getCurrent(), query.getSize()));
+        String currentId = ActiveSession.sessionIdOf(TokenAuthenticationFilter.extractToken(request));
+        List<OnlineSessionView> records = all.subList(from, to).stream()
+                .map(session -> new OnlineSessionView(session,
+                        currentId != null && currentId.equals(session.getSessionId())))
+                .toList();
+        return Result.ok(new PageResult<>(records, total, query.getCurrent(), query.getSize()));
     }
 
     /**
@@ -89,5 +101,33 @@ public class SysOnlineController {
     @DeleteMapping("/{userId}")
     public Result<Integer> forceLogout(@PathVariable Long userId) {
         return Result.ok(tokenStore.revokeAllOf(userId));
+    }
+
+    /**
+     * 在线会话列表的一行：{@link ActiveSession} 的字段平铺在顶层，旁挂一个 {@code current}。
+     *
+     * <p>{@code current} 不放进 {@link ActiveSession}：「当前」是相对于发起请求的那个人而言的，
+     * 不是会话自身的属性，而 {@code ActiveSession} 在 {@code api} 包、由各 {@code TokenStore}
+     * 实现构造，它们根本不知道是谁在看。写法同 {@code AuthController.MeView}。
+     */
+    public static final class OnlineSessionView {
+
+        private final ActiveSession session;
+        private final boolean current;
+
+        public OnlineSessionView(ActiveSession session, boolean current) {
+            this.session = session;
+            this.current = current;
+        }
+
+        @JsonUnwrapped
+        public ActiveSession getSession() {
+            return session;
+        }
+
+        /** 是否就是发起本次请求的会话。 */
+        public boolean isCurrent() {
+            return current;
+        }
     }
 }
