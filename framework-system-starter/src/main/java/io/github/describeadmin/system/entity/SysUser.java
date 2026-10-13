@@ -60,6 +60,19 @@ public class SysUser extends BaseEntity {
     private String nickname;
     private String mobile;
     private String email;
+
+    /**
+     * 头像的对象键（{@code StorageProvider} 的 key），不是 URL。前端按
+     * {@code /api/system/avatar/<key>} 取图。
+     *
+     * <p>{@code updateStrategy = NEVER}，理由同 {@link #username}：通用编辑端点会把请求体整个落库，
+     * 不挡住的话，管理员编辑表单（或任何能调 {@code PUT /api/system/user/{id}} 的人）可以把它写成
+     * 任意字符串，比如别人的头像键、外链 URL。这一列只能通过 {@code SysUserService} 的头像方法写入，
+     * 那条路径会校验图片内容，并负责删除旧对象。
+     */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String avatar;
+
     private Long deptId;
     private Integer status;
 
@@ -87,6 +100,8 @@ public class SysUser extends BaseEntity {
     public void setMobile(String mobile) { this.mobile = mobile; }
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+    public String getAvatar() { return avatar; }
+    public void setAvatar(String avatar) { this.avatar = avatar; }
     public Long getDeptId() { return deptId; }
     public void setDeptId(Long deptId) { this.deptId = deptId; }
     public Integer getStatus() { return status; }

@@ -3,6 +3,7 @@ package io.github.describeadmin.system.core;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -83,5 +84,16 @@ class OperLogAspectTest {
         String json = aspect.serializeArgs(new Object[]{body});
 
         assertThat(json).contains("\"deptName\":\"总部\"").contains("\"parentId\":0");
+    }
+
+    @Test
+    @DisplayName("上传的文件只记文件名和大小，文件内容不进日志")
+    void summarisesMultipartFile() {
+        byte[] content = "PNG-CONTENT-THAT-MUST-NOT-BE-LOGGED".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        MockMultipartFile file = new MockMultipartFile("file", "me.png", "image/png", content);
+
+        String json = aspect.serializeArgs(new Object[]{42L, file});
+
+        assertThat(json).isEqualTo("[42,{\"filename\":\"me.png\",\"size\":" + content.length + "}]");
     }
 }

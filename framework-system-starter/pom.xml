@@ -57,6 +57,15 @@
     </dependency>
 
     <!--
+      用户头像的读写走 StorageProvider 契约。默认是零依赖的本地磁盘实现，
+      引入对象存储插件（如 framework-storage-s3-starter）后自动切换，本模块代码不用动。
+    -->
+    <dependency>
+      <groupId>io.github.describeadmin</groupId>
+      <artifactId>framework-storage-starter</artifactId>
+    </dependency>
+
+    <!--
       操作日志切面所需。轻量级（spring-aop + aspectjweaver），
       不在父 POM enforce-core-thin 的封禁清单里。
     -->

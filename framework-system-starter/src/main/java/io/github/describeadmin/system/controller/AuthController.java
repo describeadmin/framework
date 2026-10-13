@@ -1,5 +1,6 @@
 package io.github.describeadmin.system.controller;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.Result;
 import io.github.describeadmin.common.api.ResultCode;
@@ -19,17 +20,21 @@ import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.service.SysMenuService;
+import io.github.describeadmin.system.service.SysUserAvatarService;
 import io.github.describeadmin.system.service.SysUserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -51,6 +56,7 @@ public class AuthController {
     private final SysUserService userService;
     private final CaptchaProvider captchaProvider;
     private final ObjectProvider<CaptchaGuard> captchaGuard;
+    private final SysUserAvatarService avatarService;
 
     public AuthController(AuthProviderRegistry registry,
                           SysMenuService menuService,
@@ -58,7 +64,8 @@ public class AuthController {
                           FrameworkSecurityProperties securityProperties,
                           SysUserService userService,
                           CaptchaProvider captchaProvider,
-                          ObjectProvider<CaptchaGuard> captchaGuard) {
+                          ObjectProvider<CaptchaGuard> captchaGuard,
+                          SysUserAvatarService avatarService) {
         this.registry = registry;
         this.menuService = menuService;
         this.tokenStore = tokenStore;
@@ -66,6 +73,7 @@ public class AuthController {
         this.userService = userService;
         this.captchaProvider = captchaProvider;
         this.captchaGuard = captchaGuard;
+        this.avatarService = avatarService;
     }
 
     /**
@@ -170,10 +178,16 @@ public class AuthController {
      *
      * <p>前端刷新页面后用它恢复用户信息与权限，不必把这些持久化在浏览器里——
      * 存在前端的权限集合是不可信的，每次都回源才是对的。
+     *
+     * <p>返回的是 {@link MeView}：{@link LoginUser} 的字段原样平铺，另加一个实时读库的
+     * {@code profile}。见 {@link MeView} 的类注释。
      */
     @GetMapping("/me")
-    public Result<LoginUser> me() {
-        return Result.ok(currentUser());
+    public Result<MeView> me() {
+        LoginUser user = currentUser();
+        SysUser self = userService.getOwnById(user.getUserId());
+        return Result.ok(new MeView(user, self == null ? null
+                : new MeView.Profile(self.getNickname(), self.getEmail(), self.getAvatar())));
     }
 
     /**
@@ -234,11 +248,70 @@ public class AuthController {
         return Result.ok();
     }
 
+    /**
+     * 自助换头像：multipart 表单，文件字段名 {@code file}。返回新的对象键。
+     *
+     * <p>和 {@link #updateProfile(Map)} 一样，操作对象永远是当前登录用户，不挂权限点。
+     * 文件格式与大小的校验见 {@link SysUserAvatarService}。
+     */
+    @PostMapping("/avatar")
+    public Result<String> uploadAvatar(@RequestPart(value = "file", required = false) MultipartFile file) {
+        return Result.ok(avatarService.uploadOwn(currentUser().getUserId(), file));
+    }
+
+    /** 自助移除头像，之后前端回落到默认头像。 */
+    @DeleteMapping("/avatar")
+    public Result<Void> removeAvatar() {
+        avatarService.clearOwn(currentUser().getUserId());
+        return Result.ok();
+    }
+
     private LoginUser currentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof LoginUser user)) {
             throw new BizException(ResultCode.UNAUTHORIZED, "未登录或登录已过期");
         }
         return user;
+    }
+
+    /**
+     * {@code GET /api/auth/me} 的响应体。
+     *
+     * <p>{@link LoginUser} 是登录时定格、存进令牌的快照，昵称这类可以自助修改的字段在里面不会更新，
+     * 要重新登录才会变；邮箱、头像则根本不在里面。{@code LoginUser} 在 {@code api} 包下，而且
+     * {@code TokenStore} 的实现（如 Redis 插件）会逐字段持久化它，所以不往里加字段，
+     * 改为在这里旁挂一个每次实时读库的 {@link Profile}。
+     *
+     * <p>{@code @JsonUnwrapped} 让 {@code LoginUser} 的字段保持在顶层，既有调用方读到的结构不变，
+     * 只是多出一个 {@code profile}。{@code profile} 用嵌套对象而不平铺，是为了避开和
+     * {@code LoginUser.nickname}（快照）重名。业务方自己提供 {@code AuthUserLoader}、
+     * 用户不在 {@code sys_user} 里时，{@code profile} 为 {@code null}。
+     */
+    public static final class MeView {
+
+        private final LoginUser user;
+        private final Profile profile;
+
+        public MeView(LoginUser user, Profile profile) {
+            this.user = user;
+            this.profile = profile;
+        }
+
+        @JsonUnwrapped
+        public LoginUser getUser() {
+            return user;
+        }
+
+        public Profile getProfile() {
+            return profile;
+        }
+
+        /**
+         * 实时资料。
+         *
+         * @param avatar 头像的对象键，前端拼成 {@code /api/system/<key>} 取图；没有头像为 {@code null}
+         */
+        public record Profile(String nickname, String email, String avatar) {
+        }
     }
 }

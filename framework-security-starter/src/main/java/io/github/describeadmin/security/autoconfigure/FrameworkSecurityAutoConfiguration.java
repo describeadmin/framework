@@ -9,6 +9,7 @@ import io.github.describeadmin.security.api.AuthProvider;
 import io.github.describeadmin.security.api.AuthUserLoader;
 import io.github.describeadmin.security.api.CaptchaProvider;
 import io.github.describeadmin.security.api.PasswordPolicy;
+import io.github.describeadmin.security.api.PermitAllContributor;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.CaptchaGuard;
@@ -58,8 +59,9 @@ public class FrameworkSecurityAutoConfiguration {
     /**
      * 框架内置的免认证白名单。
      *
-     * <p>与业务方配置的 {@code describeadmin.security.permit-all} 是<b>追加</b>关系。
-     * 登录相关接口必须在此，否则没人能登录进来。
+     * <p>与业务方配置的 {@code describeadmin.security.permit-all}、以及其他 starter 通过
+     * {@link PermitAllContributor} 贡献的路径都是<b>追加</b>关系。
+     * 登录相关接口必须在此，否则没人能登录进来；其他模块的路径不要写在这里。
      */
     private static final List<String> BUILT_IN_PERMIT_ALL = List.of(
             "/api/auth/login",
@@ -306,9 +308,11 @@ public class FrameworkSecurityAutoConfiguration {
                 FrameworkSecurityProperties properties,
                 TokenAuthenticationFilter tokenFilter,
                 PasswordResetRequiredFilter pwdResetFilter,
-                ResultAuthenticationEntryPoint entryPoint) throws Exception {
+                ResultAuthenticationEntryPoint entryPoint,
+                ObjectProvider<PermitAllContributor> permitAllContributors) throws Exception {
 
             List<String> permitAll = new ArrayList<>(BUILT_IN_PERMIT_ALL);
+            permitAllContributors.orderedStream().forEach(c -> permitAll.addAll(c.patterns()));
             permitAll.addAll(properties.getPermitAll());
 
             http

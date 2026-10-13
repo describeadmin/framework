@@ -14,6 +14,9 @@ target/
 # dev-seed 生成的初始管理员明文口令
 .passwd
 
+# ---- 本地上传文件（describeadmin.storage.local.root-dir 的默认值）----
+storage-data/
+
 # ---- IDE ----
 .idea/
 *.iml

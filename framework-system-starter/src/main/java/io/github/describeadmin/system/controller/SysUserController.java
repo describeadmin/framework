@@ -10,15 +10,19 @@ import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.system.core.OperLog;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.SysUserMapper;
+import io.github.describeadmin.system.service.SysUserAvatarService;
 import io.github.describeadmin.system.service.SysUserService;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -35,10 +39,12 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
 
     private final SysUserService service;
     private final TokenStore tokenStore;
+    private final SysUserAvatarService avatarService;
 
-    public SysUserController(SysUserService service, TokenStore tokenStore) {
+    public SysUserController(SysUserService service, TokenStore tokenStore, SysUserAvatarService avatarService) {
         this.service = service;
         this.tokenStore = tokenStore;
+        this.avatarService = avatarService;
     }
 
     @Override
@@ -153,6 +159,29 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
     @PutMapping("/{userId}/roles")
     public Result<Void> assignRoles(@PathVariable Long userId, @RequestBody List<Long> roleIds) {
         service.assignRoles(userId, roleIds);
+        return Result.ok();
+    }
+
+    /**
+     * 给用户换头像：multipart 表单，文件字段名 {@code file}。返回新的对象键。
+     *
+     * <p>权限点用 {@code :edit}：头像是用户资料的一部分，和编辑昵称、手机号是同一类操作，
+     * 不像重置密码、分配角色那样是需要单独授权的敏感动作，所以不另立权限点。
+     * 目标用户必须在操作者的数据权限范围内，见 {@link SysUserAvatarService#upload}。
+     */
+    @OperLog(module = "system:user", description = "设置头像")
+    @PreAuthorize("hasAuthority('system:user:edit')")
+    @PostMapping("/{userId}/avatar")
+    public Result<String> uploadAvatar(@PathVariable Long userId,
+                                       @RequestPart(value = "file", required = false) MultipartFile file) {
+        return Result.ok(avatarService.upload(userId, file));
+    }
+
+    @OperLog(module = "system:user", description = "移除头像")
+    @PreAuthorize("hasAuthority('system:user:edit')")
+    @DeleteMapping("/{userId}/avatar")
+    public Result<Void> removeAvatar(@PathVariable Long userId) {
+        avatarService.clear(userId);
         return Result.ok();
     }
 

@@ -74,4 +74,32 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             + "update_by = #{id}, update_time = NOW(), version = version + 1 WHERE id = #{id} AND deleted = 0")
     int updateSelfProfile(@Param("id") Long id, @Param("nickname") String nickname,
                           @Param("mobile") String mobile, @Param("email") String email);
+
+    /**
+     * 写头像键。自助与管理员两条路径共用，忽略数据权限过滤：调用方
+     * （{@code SysUserService} 的头像方法）已经各自确认过目标用户可以操作。
+     *
+     * <p><b>刻意不递增 {@code version}</b>，这一点和上面几个自助方法不同。{@code avatar} 是
+     * {@code updateStrategy = NEVER} 列，通用编辑永远不会写它，两条写入路径碰的列不重叠，
+     * 也就没有"后写的覆盖先写的"需要乐观锁来防。如果在这里递增版本号，管理员在编辑弹窗里
+     * 换完头像、再点「确定」时，表单里拿的还是旧版本号，会报「记录不存在或已被他人修改」。
+     *
+     * <p>清空用 {@link #clearAvatar(Long, Long)}，不要往这里传 {@code null}，原因见 CLAUDE.md 3.8。
+     *
+     * @param operatorId 写入 {@code update_by} 的操作人 id。自助场景下等于 {@code id}
+     */
+    @InterceptorIgnore(dataPermission = "true")
+    @Update("UPDATE sys_user SET avatar = #{avatar}, update_by = #{operatorId}, update_time = NOW() "
+            + "WHERE id = #{id} AND deleted = 0")
+    int updateAvatar(@Param("id") Long id, @Param("avatar") String avatar,
+                     @Param("operatorId") Long operatorId);
+
+    /**
+     * 清空头像。写的是字面量 {@code NULL}，不是绑定一个 {@code null} 参数——后者在达梦、金仓上会报
+     * 「无效的列类型」（CLAUDE.md 3.8）。不递增版本号的原因同 {@link #updateAvatar}。
+     */
+    @InterceptorIgnore(dataPermission = "true")
+    @Update("UPDATE sys_user SET avatar = NULL, update_by = #{operatorId}, update_time = NOW() "
+            + "WHERE id = #{id} AND deleted = 0")
+    int clearAvatar(@Param("id") Long id, @Param("operatorId") Long operatorId);
 }

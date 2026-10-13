@@ -12,6 +12,12 @@ describeadmin:
     # ⚠️ 不要硬编码在代码里 —— 目标库换成达梦 / 金仓 / OceanBase 时改这里即可
     db-type: MYSQL
     max-limit: 500
+  storage:
+    local:
+      # 上传文件（用户头像等）的存储根目录。相对路径按进程启动时的工作目录解析，
+      # 容器 / systemd 下不可预测 —— ⚠️ 生产环境务必改成绝对路径，并挂到持久卷上。
+      # 引入对象存储插件（framework-storage-s3-starter）后本项不再生效。
+      root-dir: ./storage-data
 
 mybatis-plus:
   global-config:

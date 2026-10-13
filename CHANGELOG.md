@@ -59,7 +59,34 @@
   业主自建的、只授了 `:edit` 的角色会失去这三项能力，在「分配菜单」里补勾对应按钮即可，
   勾选后需重新登录才生效（权限快照在登录时定格）。
 
+- **`sys_user` 新增 `avatar` 列**（用户头像）。存量库需手动执行：
+
+  ```sql
+  ALTER TABLE sys_user ADD COLUMN avatar VARCHAR(191) NULL
+    COMMENT '头像对象键' AFTER email;
+  ```
+
+  **升级前必须执行**：MyBatis-Plus 生成的查询会显式列出实体的全部列，不加列的话
+  登录、用户列表都会报「Unknown column 'avatar'」。
+- **`GET /api/auth/me` 的响应多出一个 `profile` 对象**（`nickname` / `email` / `avatar`，实时读库）。
+  `LoginUser` 的字段仍原样平铺在顶层，只读既有字段的调用方不受影响；
+  按字段白名单严格校验响应体的调用方需要放行 `profile`。
+
 ### New Features
+
+- **用户头像**。管理员在用户管理里代设（`POST/DELETE /api/system/user/{id}/avatar`，
+  权限点 `system:user:edit`，受数据权限约束），用户在个人中心自助设置
+  （`POST/DELETE /api/auth/avatar`）。文件走 `StorageProvider`：默认存本地磁盘
+  （`describeadmin.storage.local.root-dir`，**生产环境务必配绝对路径**），引入
+  `framework-storage-s3-starter` 后自动切到对象存储。库里只存对象键，不存 URL。
+  上传按魔数只收 PNG / JPEG / WebP（**不收 SVG**），≤ 1MB，宽高 ≤ 4096。
+  读取端点 `GET /api/system/avatar/{userId}/{file}` **免登录**（`<img src>` 不带令牌），
+  只认头像目录下形状合规的键，键里含 128 位随机段，响应带 `nosniff` 与一年 `immutable` 缓存。
+  `sys_user.avatar` 是 `updateStrategy = NEVER` 列，通用编辑端点写不进去。
+  `framework-system-starter` 因此新增对 `framework-storage-starter` 的依赖。
+- **`PermitAllContributor`**（`framework-security-starter` 的 `api` 包）：其他 starter
+  注册这个 Bean 即可往免认证白名单里追加路径，安全层不必知道别的模块的路径。
+  与 `describeadmin.security.permit-all` 同为追加关系。
 
 - **`LockOperations` 锁 SPI**（`framework-cache-starter`）：`tryLock`（快速失败）/
   `lock`（限时等待），返回持有随机 token 的 `LockHandle`（`AutoCloseable`、幂等、
@@ -91,6 +118,11 @@
   `REQUIRED_FRAMEWORK_VERSION` 上调至 `0.2.2`（锁 SPI 的引入版本）。
 
 ### Bug Fixes
+
+- 操作日志记录到 `MultipartFile` 参数时，只记文件名和大小。此前 Jackson 会调 `getBytes()`，
+  把整个文件转成 base64 写进 `sys_oper_log`，或者在 `getInputStream()` 上直接序列化失败。
+- 上传超过 `spring.servlet.multipart.max-file-size` 时返回 `40000`「上传文件超过大小限制」，
+  此前落到兜底分支，变成 500「服务器内部错误」。
 
 - **「分配数据权限」把半选的父部门一并提交，造成数据权限越授**。前端
   `submitAssignDept` 连 `getHalfCheckedKeys()` 一起交给后端，于是「只勾了几个子部门」

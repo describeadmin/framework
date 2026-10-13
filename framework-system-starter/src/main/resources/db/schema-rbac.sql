@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS sys_user (
   -- 取决于有没有装配对应的 AuthProvider 插件，字段本身跟登录方式无关，参见 CLAUDE.md 4.6 的例外说明
   mobile       VARCHAR(20)      NULL                COMMENT '手机号，可空，非空时应用层保证唯一',
   email        VARCHAR(128)     NULL                COMMENT '邮箱，可空，非空时应用层保证唯一',
+  -- 头像：存 StorageProvider 的对象键（如 avatar/1/<uuid>.png），不存 URL——URL 随部署与存储实现变化。
+  avatar       VARCHAR(191)     NULL                COMMENT '头像对象键',
   dept_id      BIGINT           NULL                COMMENT '所属部门ID',
   status       TINYINT      NOT NULL DEFAULT 1      COMMENT '状态：1启用 0禁用',
   -- 下次登录必须改密：管理员建号 / 重置密码后置 1，用户自助改密成功后清 0。

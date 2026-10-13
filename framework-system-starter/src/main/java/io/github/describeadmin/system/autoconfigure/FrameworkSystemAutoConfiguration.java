@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.describeadmin.mybatis.api.DataScopeTableCustomizer;
 import io.github.describeadmin.security.api.AuthUserLoader;
 import io.github.describeadmin.security.api.PasswordPolicy;
+import io.github.describeadmin.security.api.PermitAllContributor;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityAutoConfiguration;
 import io.github.describeadmin.system.core.DbAuthUserLoader;
 import io.github.describeadmin.system.core.DevAdminSeeder;
@@ -20,6 +21,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+
+import java.util.List;
 
 /**
  * framework-system-starter 的自动配置。
@@ -106,5 +109,16 @@ public class FrameworkSystemAutoConfiguration {
             havingValue = "true", matchIfMissing = true)
     public OperLogAspect operLogAspect(SysOperLogService operLogService, ObjectMapper objectMapper) {
         return new OperLogAspect(operLogService, objectMapper);
+    }
+
+    /**
+     * 头像读取端点免登录。
+     *
+     * <p>{@code <img src>} 不会带 {@code Authorization} 头，这个端点要求登录的话，所有头像都会显示不出来。
+     * 端点只读得到头像目录下形状合规的对象键，访问范围的约束见 {@code SysAvatarController}。
+     */
+    @Bean
+    public PermitAllContributor systemAvatarPermitAll() {
+        return () -> List.of("/api/system/avatar/**");
     }
 }

@@ -18,12 +18,15 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 操作日志切面。
@@ -153,12 +156,16 @@ public class OperLogAspect {
      *
      * <p>包可见（非 {@code private}）：同包的 {@code OperLogAspectTest} 直接调用它，
      * 不必为了测这段纯粹的字符串拼装逻辑去反射私有方法或起 Spring 上下文。
+     *
+     * <p>上传的文件只记文件名和大小：直接交给 Jackson 的话，它会调 {@code getBytes()}，
+     * 把整个文件转成 base64 塞进日志；遇到 {@code getInputStream()} 则直接序列化失败。
      */
     String serializeArgs(Object[] args) {
         try {
             Object[] loggable = Arrays.stream(args)
                     .filter(arg -> !(arg instanceof HttpServletRequest)
                             && !(arg instanceof HttpServletResponse))
+                    .map(arg -> arg instanceof MultipartFile file ? describe(file) : arg)
                     .toArray();
             JsonNode tree = objectMapper.valueToTree(loggable);
             redact(tree);
@@ -166,6 +173,13 @@ public class OperLogAspect {
         } catch (Exception e) {
             return "[参数序列化失败]";
         }
+    }
+
+    private static Map<String, Object> describe(MultipartFile file) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("filename", file.getOriginalFilename());
+        summary.put("size", file.getSize());
+        return summary;
     }
 
     /** 递归脱敏：命中敏感 key 的字段整段替换，不递归进它的值——值本身就是要藏起来的东西。 */

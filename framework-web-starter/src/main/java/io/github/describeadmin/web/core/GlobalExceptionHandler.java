@@ -14,6 +14,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.stream.Collectors;
@@ -58,6 +59,18 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining("; "));
         log.warn("参数校验失败: {}", detail);
         return Result.<Void>fail(ResultCode.VALIDATION_FAILED, detail).withTraceId(currentTraceId());
+    }
+
+    /**
+     * 上传文件超过 {@code spring.servlet.multipart.max-file-size} / {@code max-request-size}。
+     *
+     * <p>这个异常在请求进入 Controller 之前就抛出了，端点自己的大小校验根本执行不到；
+     * 不在这里处理的话，它会落到下面的兜底分支，用户看到的是一个 500「服务器内部错误」。
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        log.warn("上传文件超过大小限制: {}", ex.getMessage());
+        return Result.<Void>fail(ResultCode.BAD_REQUEST, "上传文件超过大小限制").withTraceId(currentTraceId());
     }
 
     @ExceptionHandler(NoHandlerFoundException.class)
