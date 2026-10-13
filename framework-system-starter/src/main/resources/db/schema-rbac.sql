@@ -255,3 +255,25 @@ CREATE TABLE IF NOT EXISTS sys_oper_log (
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_general_ci
   COMMENT='操作日志';
+
+-- 站内信。每个收件人一行（写扩散）。由 MessageSender 写入，收件人只读 / 标已读 / 删除，
+-- 不继承 BaseEntity 的审计字段/逻辑删除/乐观锁语义（见 SysMessage 的类注释）：
+-- 删除与「清空已读」都是物理删除，删掉后不保留"曾通知过此人"的凭据。
+CREATE TABLE IF NOT EXISTS sys_message (
+  id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  user_id      BIGINT       NOT NULL                COMMENT '收件人',
+  sender_id    BIGINT           NULL                COMMENT '发送人，空=系统消息',
+  category     VARCHAR(64)  NOT NULL                COMMENT '分类，业务自定，如 workorder.approval',
+  title        VARCHAR(128) NOT NULL                COMMENT '标题',
+  content      VARCHAR(500)     NULL                COMMENT '正文，纯文本',
+  link         VARCHAR(255)     NULL                COMMENT '站内路由路径，可带 query',
+  biz_key      VARCHAR(64)      NULL                COMMENT '业务键，供 markReadByBiz',
+  read_time    DATETIME         NULL                COMMENT '已读时间，空=未读',
+  create_time  DATETIME         NULL                COMMENT '发送时间',
+  PRIMARY KEY (id),
+  KEY idx_sys_message_user_read (user_id, read_time),
+  KEY idx_sys_message_biz (category, biz_key)
+) ENGINE=InnoDB
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_general_ci
+  COMMENT='站内信';

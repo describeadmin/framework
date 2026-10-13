@@ -377,3 +377,12 @@ INSERT INTO sys_config (config_key, config_value, config_name, config_type,
 SELECT 'sys.password.history-count', '0', '密码历史不可重用数（0=不校验）', 'Y', NOW(), NOW(), 0, 0
 FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM sys_config WHERE config_key = 'sys.password.history-count' AND deleted = 0);
+
+-- -----------------------------------------------------------------------------
+-- 站内信分类字典。只登记类型、不放数据：分类由业务方自定（如 workorder.approval），
+-- 在「字典管理」里给这个类型加数据即可让消息中心显示中文名；没登记的分类原样显示编码。
+-- -----------------------------------------------------------------------------
+INSERT INTO sys_dict_type (dict_type, dict_name, status, create_time, update_time, deleted, version)
+SELECT 'sys_message_category', '站内信分类', 1, NOW(), NOW(), 0, 0
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict_type WHERE dict_type = 'sys_message_category' AND deleted = 0);

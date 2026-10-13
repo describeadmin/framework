@@ -72,8 +72,22 @@
   `LoginUser` 的字段仍原样平铺在顶层，只读既有字段的调用方不受影响；
   按字段白名单严格校验响应体的调用方需要放行 `profile`。
 
+- **新增 `sys_message` 表**（站内信）。`schema-rbac.sql` 是 `CREATE TABLE IF NOT EXISTS`，
+  `spring.sql.init.mode=always` 的环境启动时会自动建；生产环境（`never`）需手动执行
+  `schema-rbac.sql` 末尾那段 `CREATE TABLE IF NOT EXISTS sys_message ...`。
+  不建表的话登录不受影响，但顶栏铃铛的轮询会持续报错（前端已静默，见后端日志）。
+  `seed-rbac.sql` 另补了一条字典类型 `sys_message_category`（幂等，可重复执行）。
+
 ### New Features
 
+- **站内信**。业务代码注入 `io.github.describeadmin.system.api.MessageSender` 发消息：
+  `send(userIds, MessageDraft)` 给一批用户各发一条（参与调用方事务，单次上限 2000 人，
+  超限抛错不截断），`markReadByBiz(category, bizKey)` 在或签类待办办完后对所有收件人收尾。
+  `MessageDraft` 构造期校验：`category` 为业务自定的开放字符串（显示名走字典
+  `sys_message_category`），`link` 只接受站内路由路径，外链与 `//`、`/\` 一律拒绝。
+  收件人侧端点 `/api/auth/messages`（`/inbox` 轮询、分页、单条/全部已读、删除、清空已读），
+  只要求登录、只能操作自己的消息；**框架不提供"用户给用户发消息"的接口**。
+  删除与清空已读都是物理删除，清空不会删掉未读消息。约定见 `docs/CLAUDE.md` §4.13。
 - **用户头像**。管理员在用户管理里代设（`POST/DELETE /api/system/user/{id}/avatar`，
   权限点 `system:user:edit`，受数据权限约束），用户在个人中心自助设置
   （`POST/DELETE /api/auth/avatar`）。文件走 `StorageProvider`：默认存本地磁盘

@@ -7,6 +7,9 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.Collection;
+import java.util.List;
+
 /** SysUser Mapper。 */
 public interface SysUserMapper extends BaseMapper<SysUser> {
 
@@ -102,4 +105,19 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
     @Update("UPDATE sys_user SET avatar = NULL, update_by = #{operatorId}, update_time = NOW() "
             + "WHERE id = #{id} AND deleted = 0")
     int clearAvatar(@Param("id") Long id, @Param("operatorId") Long operatorId);
+
+    /**
+     * 站内信展示发送人用：按 id 批量取 {@code id/nickname/avatar} 三列，忽略数据权限过滤。
+     *
+     * <p>收件人看到"谁发给我的"，和"我能看到哪些人的数据"是两个问题——发送人的昵称与头像属于
+     * 组织元数据（同 CLAUDE.md 4.11 的 A 档），而且 SELF 档用户（无角色用户的默认落点）按数据权限
+     * 一个发送人都查不到。只取这三列，不把用户实体整个带出去。
+     *
+     * <p>不过滤 {@code deleted}：发送人后来被删除了，那条消息也确实是他发的。
+     */
+    @InterceptorIgnore(dataPermission = "true")
+    @Select("<script>SELECT id, nickname, avatar FROM sys_user WHERE id IN "
+            + "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>"
+            + "</script>")
+    List<SysUser> selectBriefByIdsIgnoreDataScope(@Param("ids") Collection<Long> ids);
 }
