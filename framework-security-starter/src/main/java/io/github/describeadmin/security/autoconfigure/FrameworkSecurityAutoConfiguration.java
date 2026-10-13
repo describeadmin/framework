@@ -17,7 +17,9 @@ import io.github.describeadmin.security.core.DefaultPasswordPolicy;
 import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import io.github.describeadmin.security.core.InMemoryTokenStore;
 import io.github.describeadmin.security.core.LoginAttemptGuard;
+import io.github.describeadmin.security.core.LoginRiskCounter;
 import io.github.describeadmin.security.core.PasswordResetRequiredFilter;
+import io.github.describeadmin.security.core.PowCaptchaProvider;
 import io.github.describeadmin.security.core.ResultAuthenticationEntryPoint;
 import io.github.describeadmin.security.core.SecurityContextCurrentUserProvider;
 import io.github.describeadmin.security.core.SecurityContextDataScopeProvider;
@@ -27,12 +29,14 @@ import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.security.core.UsernamePasswordAuthProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -111,7 +115,8 @@ public class FrameworkSecurityAutoConfiguration {
     }
 
     /**
-     * 验证码生成/校验能力，核心默认实现是图形字符验证码。
+     * 验证码生成/校验能力，核心默认实现是 PoW（{@link PowCaptchaProvider}），
+     * {@code describeadmin.security.captcha.type=image} 切回图形字符验证码。
      *
      * <p>不受 {@code describeadmin.security.captcha.enabled} 影响——"能力是否存在"
      * 与"是否强制生效"分离，与 {@link #passwordEncoder()}/{@link #tokenStore} 是同一模式。
@@ -122,14 +127,73 @@ public class FrameworkSecurityAutoConfiguration {
     @ConditionalOnMissingBean(CaptchaProvider.class)
     public CaptchaProvider captchaProvider(CacheProvider cacheProvider, FrameworkSecurityProperties properties) {
         FrameworkSecurityProperties.Captcha captcha = properties.getCaptcha();
-        return new ImageCaptchaProvider(cacheProvider, captcha.getTtl(), captcha.getCodeLength());
+        String type = captcha.getType();
+        if (FrameworkSecurityProperties.Captcha.TYPE_POW.equals(type)) {
+            return new PowCaptchaProvider(cacheProvider, captcha.getTtl(), captcha.getPow().getMaxNumber());
+        }
+        if (FrameworkSecurityProperties.Captcha.TYPE_IMAGE.equals(type)) {
+            return new ImageCaptchaProvider(cacheProvider, captcha.getTtl(), captcha.getCodeLength());
+        }
+        // 写错的值静默回落到某个默认实现，会让业主以为自己配上了别的验证码
+        throw new IllegalStateException("describeadmin.security.captcha.type 只支持 "
+                + FrameworkSecurityProperties.Captcha.TYPE_POW + " / "
+                + FrameworkSecurityProperties.Captcha.TYPE_IMAGE + "，当前为: " + type);
+    }
+
+    /**
+     * 渐进式验证码的 IP / 全局维度计数。两个维度都关闭时不注册，
+     * {@link CaptchaGuard} 拿到 null 后只剩用户名维度。
+     *
+     * <p>随验证码总开关一起关闭——它唯一的消费方就是 {@link CaptchaGuard}。
+     */
+    @Bean
+    @ConditionalOnMissingBean(LoginRiskCounter.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security.captcha", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    @Conditional(AnyRiskDimensionEnabled.class)
+    public LoginRiskCounter loginRiskCounter(CacheProvider cacheProvider, FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.Captcha captcha = properties.getCaptcha();
+        return new LoginRiskCounter(cacheProvider,
+                dimensionOf("ip", captcha.getIp()), dimensionOf("global", captcha.getGlobal()));
+    }
+
+    /** IP 维度与全局维度至少开着一个。 */
+    static class AnyRiskDimensionEnabled extends AnyNestedCondition {
+
+        AnyRiskDimensionEnabled() {
+            super(ConfigurationPhase.REGISTER_BEAN);
+        }
+
+        @ConditionalOnProperty(prefix = "describeadmin.security.captcha.ip", name = "enabled",
+                havingValue = "true", matchIfMissing = true)
+        static class IpEnabled {
+        }
+
+        @ConditionalOnProperty(prefix = "describeadmin.security.captcha.global", name = "enabled",
+                havingValue = "true", matchIfMissing = true)
+        static class GlobalEnabled {
+        }
+    }
+
+    private static LoginRiskCounter.Dimension dimensionOf(String name,
+                                                          FrameworkSecurityProperties.RiskDimension props) {
+        if (!props.isEnabled()) {
+            return null;
+        }
+        try {
+            return new LoginRiskCounter.Dimension(props.getThreshold(), props.getWindow());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("describeadmin.security.captcha." + name + " 配置无效: "
+                    + e.getMessage(), e);
+        }
     }
 
     /**
      * 渐进式验证码的强制生效开关，受 {@code describeadmin.security.captcha.enabled} 控制。
      *
-     * <p>依赖可选的 {@link LoginAttemptGuard}——关闭失败次数限制
-     * （{@code describeadmin.security.lockout.enabled=false}）时验证码同样不再拦截，
+     * <p>用户名维度依赖可选的 {@link LoginAttemptGuard}——关闭失败次数限制
+     * （{@code describeadmin.security.lockout.enabled=false}）时该维度不再触发；
+     * IP / 全局维度依赖可选的 {@link LoginRiskCounter}，不受锁定开关影响。
      * 见 {@link CaptchaGuard} 类注释"已知取舍"第 2 条。
      *
      * <p>装配时校验 {@code triggerThreshold < lockout.maxFailures}：配置错误必须在启动期
@@ -140,7 +204,8 @@ public class FrameworkSecurityAutoConfiguration {
     @ConditionalOnProperty(prefix = "describeadmin.security.captcha", name = "enabled",
             havingValue = "true", matchIfMissing = true)
     public CaptchaGuard captchaGuard(CaptchaProvider captchaProvider, FrameworkSecurityProperties properties,
-                                     ObjectProvider<LoginAttemptGuard> attemptGuardProvider) {
+                                     ObjectProvider<LoginAttemptGuard> attemptGuardProvider,
+                                     ObjectProvider<LoginRiskCounter> riskCounterProvider) {
         FrameworkSecurityProperties.Captcha captcha = properties.getCaptcha();
         LoginAttemptGuard attemptGuard = attemptGuardProvider.getIfAvailable();
         if (attemptGuard != null && captcha.getTriggerThreshold() >= properties.getLockout().getMaxFailures()) {
@@ -149,8 +214,8 @@ public class FrameworkSecurityAutoConfiguration {
                             + ") 必须小于 describeadmin.security.lockout.max-failures("
                             + properties.getLockout().getMaxFailures() + ")");
         }
-        return new CaptchaGuard(captchaProvider, attemptGuard, captcha.getTriggerThreshold(),
-                captcha.getApplicableTypes());
+        return new CaptchaGuard(captchaProvider, attemptGuard, riskCounterProvider.getIfAvailable(),
+                captcha.getTriggerThreshold(), captcha.getApplicableTypes());
     }
 
     /**

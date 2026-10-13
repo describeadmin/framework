@@ -2,6 +2,12 @@ spring:
   application:
     name: ${artifactId}
 
+# 部署在 Nginx 等反向代理之后时打开：让容器从受信代理（默认内网地址段）还原真实客户端 IP。
+# 登录风控（验证码的 IP 维度）只认 request.getRemoteAddr()，不信任可伪造的 X-Forwarded-For；
+# 不打开的话所有人共享代理的 IP，验证码会对全员触发。直连部署不要打开。
+# server:
+#   forward-headers-strategy: native
+
 # 框架配置，前缀统一为 describeadmin.<模块>
 describeadmin:
   web:

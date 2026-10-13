@@ -113,11 +113,24 @@ public class AuthController {
     @PostMapping("/login")
     public Result<LoginResult> login(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         String type = String.valueOf(body.getOrDefault("type", "password"));
+        // 风控用直连地址，不用 RequestClientInfo.clientIp()：后者优先信任 X-Forwarded-For，
+        // 攻击者每次请求换一个伪造值就能绕过 IP 维度。反向代理之后由
+        // server.forward-headers-strategy=native 让容器从受信代理还原真实地址
+        String riskIp = request.getRemoteAddr();
         CaptchaGuard guard = captchaGuard.getIfAvailable();
         if (guard != null) {
-            guard.verifyIfRequired(type, body);
+            guard.verifyIfRequired(type, body, riskIp);
         }
-        LoginUser user = registry.authenticate(new AuthRequest(type, body));
+        LoginUser user;
+        try {
+            user = registry.authenticate(new AuthRequest(type, body));
+        } catch (BizException e) {
+            // 只记账、原样重抛，错误响应仍由全局异常处理器产出
+            if (guard != null && e.getCode() == ResultCode.AUTH_FAILED.getCode()) {
+                guard.recordFailure(type, riskIp);
+            }
+            throw e;
+        }
         // 登录来源写进会话，供"在线用户"页展示；TokenStore 实现可选择忽略（默认实现即忽略）
         SessionMeta meta = new SessionMeta(
                 RequestClientInfo.clientIp(request), RequestClientInfo.device(request));

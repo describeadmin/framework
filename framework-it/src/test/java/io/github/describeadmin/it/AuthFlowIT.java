@@ -1,7 +1,5 @@
 package io.github.describeadmin.it;
 
-import io.github.describeadmin.cache.api.CacheProvider;
-import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +37,6 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
     private static final int CAPTCHA_TRIGGER_THRESHOLD = 3;
 
     @Autowired TestRestTemplate rest;
-    @Autowired CacheProvider cacheProvider;
     @Autowired JdbcTemplate jdbc;
 
     // ------------------------------------------------------------------ 登录
@@ -315,16 +312,20 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
     // ------------------------------------------------------------------ 验证码
 
     @Test
-    @DisplayName("GET /api/auth/captcha 免认证，返回图形验证码挑战")
-    void captchaEndpointIsPermitAllAndReturnsImage() {
+    @DisplayName("GET /api/auth/captcha 免认证，默认返回 PoW 挑战")
+    void captchaEndpointIsPermitAllAndReturnsPow() {
         ResponseEntity<Map> resp = rest.getForEntity("/api/auth/captcha", Map.class);
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         Map<String, Object> challenge = captchaData(resp);
-        assertThat(challenge.get("type")).isEqualTo("image");
+        assertThat(challenge.get("type")).isEqualTo("pow");
         @SuppressWarnings("unchecked")
         Map<String, Object> payload = (Map<String, Object>) challenge.get("payload");
-        assertThat((String) payload.get("image")).startsWith("data:image/png;base64,");
+        assertThat(payload.get("algorithm")).isEqualTo("SHA-256");
+        assertThat((String) payload.get("salt")).matches("[0-9a-f]{32}");
+        assertThat((String) payload.get("challenge")).matches("[0-9a-f]{64}");
+        // 必须是 JSON 数字而不是字符串——前端求解器按数字循环
+        assertThat(payload.get("maxNumber")).isEqualTo(100000);
     }
 
     @Test
@@ -349,11 +350,10 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
                 .as("达到阈值后必须要求验证码，即使密码正确")
                 .contains("\"code\":40103");
 
-        // 拿一个真实验证码，直接从注入的 CacheProvider 读出正确答案——图形验证码是给人眼看的，
-        // 自动化测试没法"识图"，ImageCaptchaProvider.CACHE_KEY_PREFIX 就是为这条路径公开的
-        String captchaId = captchaData(rest.getForEntity("/api/auth/captcha", Map.class))
-                .get("captchaId").toString();
-        String answer = correctAnswerOf(captchaId);
+        // 拿一道真实的 PoW 题，走与浏览器相同的求解路径
+        Map<String, Object> challenge = captchaData(rest.getForEntity("/api/auth/captcha", Map.class));
+        String captchaId = challenge.get("captchaId").toString();
+        String answer = PowSolver.solve(challenge);
 
         // 验证码正确、密码仍然错误：两层校验相互独立
         ResponseEntity<String> wrongPasswordWithCaptcha = rest.postForEntity("/api/auth/login",
@@ -371,10 +371,10 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
                 .as("验证码必须是一次性的，不能重放")
                 .contains("\"code\":40104");
 
-        // 换一张新验证码，配合正确密码，登录成功
-        String freshCaptchaId = captchaData(rest.getForEntity("/api/auth/captcha", Map.class))
-                .get("captchaId").toString();
-        String freshAnswer = correctAnswerOf(freshCaptchaId);
+        // 换一道新题，配合正确密码，登录成功
+        Map<String, Object> fresh = captchaData(rest.getForEntity("/api/auth/captcha", Map.class));
+        String freshCaptchaId = fresh.get("captchaId").toString();
+        String freshAnswer = PowSolver.solve(fresh);
 
         ResponseEntity<Map> success = rest.postForEntity("/api/auth/login",
                 json(Map.of("type", "password", "username", username, "password", "right-password-1",
@@ -487,11 +487,6 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> captchaData(ResponseEntity<Map> resp) {
         return (Map<String, Object>) resp.getBody().get("data");
-    }
-
-    private String correctAnswerOf(String captchaId) {
-        return cacheProvider.get(ImageCaptchaProvider.CACHE_KEY_PREFIX + captchaId, String.class)
-                .orElseThrow(() -> new IllegalStateException("测试前置条件：验证码答案应存在于缓存中"));
     }
 
     private ResponseEntity<String> login(String username, String password) {

@@ -19,6 +19,15 @@ describeadmin:
     local:
       # 头像等上传文件落在 target 下，随 mvn clean 清理，不在仓库根目录留 storage-data
       root-dir: target/it-storage
+  security:
+    captcha:
+      # 所有用例的请求都来自 127.0.0.1、共享同一个应用上下文的缓存，IP / 全局失败计数
+      # 会跨用例累积，默认阈值下后面的用例会莫名其妙收到"需要验证码"。这里抬到碰不到的高度，
+      # 两个维度的行为由 LoginRiskIT 用独立上下文单独覆盖
+      ip:
+        threshold: 1000000
+      global:
+        threshold: 1000000
   system:
     # 库里没有用户时创建管理员 admin，随机强口令写到 target 下的文件
     # （具体路径见 AbstractMySqlIntegrationTest.DEV_SEED_PASSWORD_FILE）

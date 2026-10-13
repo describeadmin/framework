@@ -217,10 +217,17 @@ public class FrameworkSecurityProperties {
     /**
      * 渐进式验证码，前缀 {@code describeadmin.security.captcha}。
      *
-     * <p>正常登录不要求验证码；同一用户名连续登录失败达到 {@link #triggerThreshold} 后，
-     * 才要求携带验证码——复用 {@code LoginAttemptGuard} 已有的失败计数。
+     * <p>正常登录不要求验证码；以下任一维度达到阈值后才要求携带验证码：
+     * 同一用户名连续失败达到 {@link #triggerThreshold}（复用 {@code LoginAttemptGuard} 的计数）、
+     * 同一 IP 在时间窗内失败达到 {@link #ip} 阈值、全站在时间窗内失败达到 {@link #global} 阈值。
      */
     public static class Captcha {
+
+        /** 核心内置的验证码实现：PoW（默认）。 */
+        public static final String TYPE_POW = "pow";
+
+        /** 核心内置的验证码实现：图形字符。 */
+        public static final String TYPE_IMAGE = "image";
 
         /**
          * 是否启用渐进式验证码策略。
@@ -230,6 +237,15 @@ public class FrameworkSecurityProperties {
          * {@code PasswordEncoder}/{@code TokenStore} 的默认 Bean 同一模式。
          */
         private boolean enabled = true;
+
+        /**
+         * 使用哪种核心内置验证码：{@code pow}（默认）或 {@code image}。
+         *
+         * <p>{@code pow} 由浏览器后台算一道哈希题，用户无需输入；{@code image} 是 4 位字符图片，
+         * 多模态模型 / OCR 几乎零成本即可识别，只为兼容保留。业务方注册了自己的
+         * {@code CaptchaProvider} Bean 时本项不起作用。取其他值启动失败。
+         */
+        private String type = TYPE_POW;
 
         /**
          * 触发验证码要求的连续失败次数。
@@ -242,11 +258,31 @@ public class FrameworkSecurityProperties {
         /** 验证码有效期，同时也是答案在缓存中的存活时间。 */
         private Duration ttl = Duration.ofMinutes(2);
 
-        /** 验证码字符长度。 */
+        /** 图形验证码的字符长度，仅 {@code type=image} 时有效。 */
         private int codeLength = 4;
 
         /** 需要渐进式验证码保护的登录方式，默认仅内置的用户名密码登录。 */
         private List<String> applicableTypes = new ArrayList<>(List.of(UsernamePasswordAuthProvider.TYPE));
+
+        /** PoW 验证码参数，仅 {@code type=pow} 时有效。 */
+        private final Pow pow = new Pow();
+
+        /**
+         * IP 维度：同一 IP 在时间窗内失败达到阈值即要求验证码。
+         *
+         * <p>IP 取的是 {@code request.getRemoteAddr()}，不信任 {@code X-Forwarded-For}。
+         * 部署在反向代理之后时，需配 {@code server.forward-headers-strategy=native} 让容器
+         * 从受信代理还原真实客户端地址；不配的后果是所有人共享代理的 IP，本维度会对全员触发——
+         * 方向安全（多一次验证码），但不再能区分来源。
+         */
+        private final RiskDimension ip = new RiskDimension(10, Duration.ofMinutes(10));
+
+        /**
+         * 全局维度：全站在时间窗内失败达到阈值即对所有登录要求验证码，窗口过期自动恢复。
+         *
+         * <p>挡分散在大量 IP 上、每个 IP 只试一两次的僵尸网络喷洒——这种攻击单 IP 计数永远到不了阈值。
+         */
+        private final RiskDimension global = new RiskDimension(100, Duration.ofMinutes(5));
 
         public boolean isEnabled() {
             return enabled;
@@ -254,6 +290,26 @@ public class FrameworkSecurityProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public Pow getPow() {
+            return pow;
+        }
+
+        public RiskDimension getIp() {
+            return ip;
+        }
+
+        public RiskDimension getGlobal() {
+            return global;
         }
 
         public int getTriggerThreshold() {
@@ -286,6 +342,71 @@ public class FrameworkSecurityProperties {
 
         public void setApplicableTypes(List<String> applicableTypes) {
             this.applicableTypes = applicableTypes == null ? new ArrayList<>() : applicableTypes;
+        }
+    }
+
+    /** PoW 验证码参数，前缀 {@code describeadmin.security.captcha.pow}。 */
+    public static class Pow {
+
+        /**
+         * 难度：秘密数的上界（含），浏览器平均要尝试一半次数。
+         *
+         * <p>默认值让普通办公电脑在 1 秒内算完。调高能增加批量尝试的成本，
+         * 但老旧终端上的等待也会同比变长。
+         */
+        private int maxNumber = 100_000;
+
+        public int getMaxNumber() {
+            return maxNumber;
+        }
+
+        public void setMaxNumber(int maxNumber) {
+            this.maxNumber = maxNumber;
+        }
+    }
+
+    /** 渐进式验证码的一个计数维度（IP / 全局）。 */
+    public static class RiskDimension {
+
+        /** 是否启用本维度。 */
+        private boolean enabled = true;
+
+        /** 时间窗内的失败次数阈值。 */
+        private int threshold;
+
+        /** 固定时间窗长度：从窗口内第一次失败开始计时，到点整体清零。 */
+        private Duration window;
+
+        public RiskDimension() {
+        }
+
+        RiskDimension(int threshold, Duration window) {
+            this.threshold = threshold;
+            this.window = window;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getThreshold() {
+            return threshold;
+        }
+
+        public void setThreshold(int threshold) {
+            this.threshold = threshold;
+        }
+
+        public Duration getWindow() {
+            return window;
+        }
+
+        public void setWindow(Duration window) {
+            this.window = window;
         }
     }
 

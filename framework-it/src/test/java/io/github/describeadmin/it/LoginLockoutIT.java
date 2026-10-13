@@ -1,7 +1,5 @@
 package io.github.describeadmin.it;
 
-import io.github.describeadmin.cache.api.CacheProvider;
-import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * "用户名或密码错误"——锁定计数器也因此卡在 3 不再前进（未到达
  * {@code UsernamePasswordAuthProvider} 的请求不会调用
  * {@code LoginAttemptGuard.recordFailure}）。本类要单独验证"锁定"这一层，
- * 因此 {@link #login} 每次都顺带解出一个真实验证码一并提交，让锁定计数不受验证码这层
+ * 因此 {@link #login} 每次都顺带解出一个真实验证码（PoW）一并提交，让锁定计数不受验证码这层
  * 影响；验证码本身的行为由 {@code AuthFlowIT} 覆盖。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -45,7 +43,6 @@ class LoginLockoutIT extends AbstractMySqlIntegrationTest {
     private static final int MAX_FAILURES = 5;
 
     @Autowired TestRestTemplate rest;
-    @Autowired CacheProvider cacheProvider;
 
     @Test
     @DisplayName("连续失败达到阈值后，即使密码正确也被拒")
@@ -170,10 +167,9 @@ class LoginLockoutIT extends AbstractMySqlIntegrationTest {
     private ResponseEntity<String> login(String username, String password) {
         // 每次都顺带解出一个真实验证码——见类注释"与渐进式验证码的交互"，
         // 否则第 3 次失败起会被 CaptchaGuard 拦下，锁定计数永远到不了 MAX_FAILURES
-        String captchaId = captchaData(rest.getForEntity("/api/auth/captcha", Map.class))
-                .get("captchaId").toString();
-        String answer = cacheProvider.get(ImageCaptchaProvider.CACHE_KEY_PREFIX + captchaId, String.class)
-                .orElseThrow(() -> new IllegalStateException("测试前置条件：验证码答案应存在于缓存中"));
+        Map<String, Object> challenge = captchaData(rest.getForEntity("/api/auth/captcha", Map.class));
+        String captchaId = challenge.get("captchaId").toString();
+        String answer = PowSolver.solve(challenge);
 
         return rest.postForEntity("/api/auth/login",
                 json(Map.of("type", "password", "username", username, "password", password,

@@ -78,7 +78,33 @@
   不建表的话登录不受影响，但顶栏铃铛的轮询会持续报错（前端已静默，见后端日志）。
   `seed-rbac.sql` 另补了一条字典类型 `sys_message_category`（幂等，可重复执行）。
 
+- **默认验证码由图形字符改为 PoW（工作量证明）**，`GET /api/auth/captcha` 默认返回
+  `type: "pow"`。自己写登录页、只认 `type === "image"` 的前端会拿不到图片——要么按下面
+  New Features 的说明支持 `pow`，要么配 `describeadmin.security.captcha.type=image` 切回。
+  框架自带登录页（`apps/admin` 与 `create-app` 模板）已支持两种。
+- **渐进式验证码的触发条件变宽**：此前只看同一用户名连续失败，现在同一 IP 在 10 分钟内
+  失败 10 次、或全站 5 分钟内失败 100 次也会要求验证码。按"失败几次才出验证码"写断言的
+  自动化脚本可能提前收到 `40103`；同一出口 IP 下跑大量失败登录的测试，需调高或关闭
+  `describeadmin.security.captcha.{ip,global}`。
+
 ### New Features
+
+- **PoW 验证码**（`PowCaptchaProvider`，核心默认实现，纯 JDK 零依赖）。服务端出题
+  `hex(SHA-256(salt + n))`，浏览器从 0 起逐个尝试找出 n，用户不需要输入任何东西。
+  难度 `describeadmin.security.captcha.pow.max-number`（默认 100000，桌面 Chrome 平均约 0.1 秒、
+  最坏约 0.5 秒）。题目存 `CacheProvider`、校验一次即作废。**定位是减速带而不是墙**：
+  它让批量尝试不再免费、挡掉不会解题的脚本，但原生代码 / GPU 解题仍然很快，
+  每个账号的尝试次数真正封顶仍靠账号锁定。图形验证码保留，`captcha.type=image` 切回。
+- **渐进式验证码新增 IP 维度与全局维度**（`LoginRiskCounter`）。此前只按用户名计数，
+  密码喷洒（同一个常见密码试遍大量用户名）与撞库（每个账号只试一次）下验证码与锁定都不会触发。
+  现在 `describeadmin.security.captcha.ip.{enabled,threshold,window}`（默认开、10 次 / 10 分钟）
+  与 `...global.*`（默认开、100 次 / 5 分钟）任一达标即要求验证码；只要求验证码、不封禁，
+  避免误伤 NAT 后的整个办公网。登录成功**不清零**这两个计数（否则攻击者用一个有效账号就能刷掉），
+  只随固定时间窗过期；验证码答错不计入。两个维度不依赖账号锁定，关掉锁定后照常工作。
+  **风控 IP 取 `request.getRemoteAddr()`，不信任 `X-Forwarded-For`**（客户端可伪造，
+  每次换一个值即可绕过）。部署在反向代理之后需配 `server.forward-headers-strategy=native`；
+  不配的话所有人共享代理 IP，IP 维度会对全员触发——方向安全，但失去区分来源的能力。
+  见 `docs/CLAUDE.md` §4.14。
 
 - **站内信**。业务代码注入 `io.github.describeadmin.system.api.MessageSender` 发消息：
   `send(userIds, MessageDraft)` 给一批用户各发一条（参与调用方事务，单次上限 2000 人，
