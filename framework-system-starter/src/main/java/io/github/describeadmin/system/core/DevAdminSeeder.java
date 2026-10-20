@@ -23,7 +23,7 @@ import java.util.List;
  * 开发种子管理员：库里没有任何用户时，创建一个管理员账号并<b>随机生成</b>口令，
  * BCrypt 入库，明文写到 {@code describeadmin.system.dev-seed.password-file} 并打印到启动日志。
  *
- * <p>取代了原先 {@code seed-rbac.sql} 里写死 {@code admin / admin123} 的那条 INSERT——
+ * <p>取代了原先 {@code seed-rbac.sql}（现 {@code 0002-rbac-seed.sql}）里写死 {@code admin / admin123} 的那条 INSERT——
  * 静态 SQL 无法生成随机值 / 写文件，所以这一步必须程序化。
  *
  * <p>只在 {@code describeadmin.system.dev-seed.enabled=true} 时装配（见
@@ -58,7 +58,7 @@ public class DevAdminSeeder implements ApplicationRunner {
                 new QueryWrapper<SysRole>().eq("role_code", props.getAdminRoleCode()), false);
         if (adminRole == null) {
             throw new IllegalStateException("dev-seed: 找不到角色 role_code=" + props.getAdminRoleCode()
-                    + "，seed-rbac.sql 应先建好它");
+                    + "，0002-rbac-seed.sql 应先建好它");
         }
 
         String rawPassword = RandomPasswordGenerator.generate(passwordPolicy, props.getAdminUsername());

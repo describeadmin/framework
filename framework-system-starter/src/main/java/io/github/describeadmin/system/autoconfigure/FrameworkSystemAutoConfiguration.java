@@ -10,6 +10,8 @@ import io.github.describeadmin.system.core.DbAuthUserLoader;
 import io.github.describeadmin.system.core.DevAdminSeeder;
 import io.github.describeadmin.system.core.OperLogAspect;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
+import io.github.describeadmin.system.migration.DescribeAdminLiquibase;
+import io.github.describeadmin.system.migration.MigrationMode;
 import io.github.describeadmin.system.service.SysConfigService;
 import io.github.describeadmin.system.service.SysOperLogService;
 import io.github.describeadmin.system.service.SysRoleService;
@@ -21,7 +23,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.core.env.Environment;
 
+import javax.sql.DataSource;
 import java.util.List;
 
 /**
@@ -43,17 +47,52 @@ import java.util.List;
  *
  * <p>这是跨 starter 使用 {@code @ConditionalOnBean} 的典型陷阱：编译期毫无征兆，
  * 只有真实启动上下文才暴露。本项目已由 framework-it 的集成测试捕获过一次。
+ *
+ * <p><b>为什么还要排在 {@code LiquibaseAutoConfiguration} 之前</b>：它靠
+ * {@code @ConditionalOnMissingBean(SpringLiquibase.class)} 让位给本类注册的
+ * {@link DescribeAdminLiquibase}，这个判断同样只看评估到它时已注册的 Bean 定义。
  */
-@AutoConfiguration(before = FrameworkSecurityAutoConfiguration.class)
+@AutoConfiguration(before = FrameworkSecurityAutoConfiguration.class,
+        beforeName = "org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration")
 @ConditionalOnProperty(prefix = "describeadmin.system", name = "enabled",
         havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties(FrameworkSystemProperties.class)
+@EnableConfigurationProperties({FrameworkSystemProperties.class, MigrationProperties.class})
 @MapperScan("io.github.describeadmin.system.mapper")
 @ComponentScan(basePackages = {
         "io.github.describeadmin.system.service",
         "io.github.describeadmin.system.controller"
 })
 public class FrameworkSystemAutoConfiguration {
+
+    /**
+     * 数据库迁移。按 {@code describeadmin.migration.mode} 决定启动时执行、只检查还是输出 SQL，
+     * 默认只检查——见 {@link DescribeAdminLiquibase} 与 {@link MigrationProperties}。
+     *
+     * <p>两条启动期检查放在这里而不是运行中再发现：
+     * <ul>
+     *   <li>contexts 为空时 Liquibase 会执行所有带 context 标记的 changeset，必须拒绝。</li>
+     *   <li>{@code spring.sql.init.mode=always} 与迁移同时开着，等于同一批表有两个入口在建，
+     *       必须二选一。</li>
+     * </ul>
+     */
+    @Bean
+    public DescribeAdminLiquibase describeAdminLiquibase(DataSource dataSource,
+                                                         MigrationProperties properties,
+                                                         Environment environment) {
+        if (properties.getMode() != MigrationMode.OFF) {
+            if (properties.getContexts() == null || properties.getContexts().isBlank()) {
+                throw new IllegalStateException("describeadmin.migration.contexts 不能为空："
+                        + "为空时 Liquibase 会执行所有带 context 标记的 changeset");
+            }
+            if ("always".equalsIgnoreCase(environment.getProperty("spring.sql.init.mode"))) {
+                throw new IllegalStateException("spring.sql.init.mode=always 与 describeadmin.migration "
+                        + "不能同时开启：建表已由 Liquibase changelog 负责，请删掉 spring.sql.init 配置");
+            }
+        }
+        DescribeAdminLiquibase liquibase = new DescribeAdminLiquibase(properties);
+        liquibase.setDataSource(dataSource);
+        return liquibase;
+    }
 
     /**
      * 基于 {@code sys_*} 表的默认用户加载实现。

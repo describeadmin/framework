@@ -131,7 +131,7 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
      * 重置他人密码。
      *
      * <p><b>权限点是专用的 {@code system:user:reset-password}，不要"简化"成 {@code :edit}。</b>
-     * {@code seed-rbac.sql} 把它登记成了独立的 BUTTON，授权树上是一个独立的勾；若这里校验
+     * {@code 0002-rbac-seed.sql} 把它登记成了独立的 BUTTON，授权树上是一个独立的勾；若这里校验
      * {@code :edit}，那个勾勾不勾都一样，而授了"编辑"就等于连带授出了改他人密码的能力——
      * 界面上看不出来，是静默的扩权。
      */

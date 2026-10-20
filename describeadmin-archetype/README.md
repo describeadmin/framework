@@ -24,11 +24,10 @@ mvn archetype:generate -B \
 | 生成物里的哪一行 | 缺了会怎样 |
 |---|---|
 | `pom.xml` 的 `<mysql.version>8.2.0</mysql.version>` | 继承来的 `dependencyManagement` 优先级高于 import 的 BOM，驱动被换成新版，连 MySQL 5.7 直接失败 |
-| `application-local.yml` 的 `encoding: UTF-8` | Spring 用平台默认编码读 SQL 脚本，中文全乱码而 `COUNT(*)` 完全正常 |
+| `application-local.yml` 的 `describeadmin.migration.mode: apply` | 迁移默认只检查不执行，本地空库第一次启动就会以「有未执行的 changeset」拒绝启动 |
 
-生成物**不带任何 SQL 文件**：`schema-rbac.sql` / `seed-rbac.sql` 在
-`framework-system-starter` 的 jar 里，业务方通过 `classpath:` 引用即可。
-这正是"空工程也能直接登录"的原因。
+生成物**不带任何 SQL 文件**：框架自己的 `sys_*` 表与结构数据是 `framework-system-starter`
+jar 里的 Liquibase changelog，启动时由框架的迁移层执行。这正是"空工程也能直接登录"的原因。
 
 ## 为什么不生成 toolchains 配置
 

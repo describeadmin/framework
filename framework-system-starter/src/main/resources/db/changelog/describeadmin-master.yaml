@@ -1,0 +1,18 @@
+# describeadmin 的主 changelog，由 DescribeAdminLiquibase 固定使用，业务方不需要、也不应该自己写主 changelog。
+#
+# 执行顺序：
+#   1. 框架自己的 sys_* 表与结构数据，按下面写死的顺序；
+#   2. 业务方 classpath 下 db/changelog/app/ 里的所有 .sql，按路径字母序（includeAll）。
+#      新文件按 <yyyyMMddHHmm>__<描述>.sql 命名，时间戳保证顺序、并行开发也不撞号。
+#      不需要在任何地方登记。
+#
+# 框架的 changeset 永远排在业务之前：业务的菜单要挂在框架建的「系统管理」等目录下、
+# 授权要用框架建的 ADMIN 角色。
+databaseChangeLog:
+  - include:
+      file: db/changelog/describeadmin/0001-rbac-schema.sql
+  - include:
+      file: db/changelog/describeadmin/0002-rbac-seed.sql
+  - includeAll:
+      path: db/changelog/app/
+      errorIfMissingOrEmpty: false

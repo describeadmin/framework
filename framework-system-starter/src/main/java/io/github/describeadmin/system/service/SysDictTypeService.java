@@ -15,7 +15,7 @@ import org.springframework.util.StringUtils;
  *
  * <p>{@code dictType} 唯一性在应用层校验，而非数据库唯一索引——逻辑删除下建唯一索引
  * 会导致删除后无法复用同名字典类型，理由同 {@code SysUserService.username}（见
- * schema-rbac.sql 对应注释）。<b>并发唯一性由 {@link UniqueGuard} 的键级锁保证</b>：
+ * 0001-rbac-schema.sql 对应注释）。<b>并发唯一性由 {@link UniqueGuard} 的键级锁保证</b>：
  * 没有锁时两个并发请求会同时通过校验、各插一条。
  */
 @Service

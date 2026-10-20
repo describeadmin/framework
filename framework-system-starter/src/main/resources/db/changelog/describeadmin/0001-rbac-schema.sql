@@ -1,3 +1,5 @@
+--liquibase formatted sql logicalFilePath:describeadmin/0001-rbac-schema.sql
+
 -- =============================================================================
 -- describe-admin RBAC 基础表结构
 --
@@ -13,8 +15,12 @@
 --   ✓ 主键为 BIGINT AUTO_INCREMENT，与全局 IdType.AUTO 一致
 --
 -- 审计字段与 BaseEntity 一一对应，业务表同样应包含这 6 个字段。
+--
+-- ⚠️ 下面的 changeset 执行过就【不能再改】（包括往 CREATE 里加列）：Liquibase 按校验和
+--    比对，改了的话所有已建库的环境都会拒绝启动。加列 / 改列一律新建 changelog 文件写 ALTER。
 -- =============================================================================
 
+--changeset describeadmin:sys_user
 CREATE TABLE IF NOT EXISTS sys_user (
   id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   username     VARCHAR(64)  NOT NULL                COMMENT '登录名',
@@ -50,6 +56,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
   COLLATE utf8mb4_general_ci
   COMMENT='用户';
 
+--changeset describeadmin:sys_user_password_history
 -- 历史密码。只追加、由 SysUserService 在每次设密码时写入，不继承 BaseEntity 的审计/逻辑删除/乐观锁
 -- （同 sys_oper_log）。仅当 sys.password.history-count > 0 时参与校验：新密码不得命中最近 N 条。
 CREATE TABLE IF NOT EXISTS sys_user_password_history (
@@ -64,6 +71,7 @@ CREATE TABLE IF NOT EXISTS sys_user_password_history (
   COLLATE utf8mb4_general_ci
   COMMENT='用户历史密码';
 
+--changeset describeadmin:sys_role
 CREATE TABLE IF NOT EXISTS sys_role (
   id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
   role_code    VARCHAR(64) NOT NULL                COMMENT '角色标识',
@@ -86,6 +94,7 @@ CREATE TABLE IF NOT EXISTS sys_role (
   COLLATE utf8mb4_general_ci
   COMMENT='角色';
 
+--changeset describeadmin:sys_menu
 CREATE TABLE IF NOT EXISTS sys_menu (
   id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   parent_id    BIGINT       NOT NULL DEFAULT 0      COMMENT '父菜单ID，0为根',
@@ -115,6 +124,7 @@ CREATE TABLE IF NOT EXISTS sys_menu (
   COLLATE utf8mb4_general_ci
   COMMENT='菜单与权限';
 
+--changeset describeadmin:sys_user_role
 -- 关联表不设审计字段与逻辑删除：授权关系是「重建」语义而非「修改」语义，
 -- 每次授权直接物理删除旧关系再插入新关系，保留软删记录只会让查询变复杂。
 CREATE TABLE IF NOT EXISTS sys_user_role (
@@ -127,6 +137,7 @@ CREATE TABLE IF NOT EXISTS sys_user_role (
   COLLATE utf8mb4_general_ci
   COMMENT='用户角色关联';
 
+--changeset describeadmin:sys_role_menu
 CREATE TABLE IF NOT EXISTS sys_role_menu (
   role_id BIGINT NOT NULL COMMENT '角色ID',
   menu_id BIGINT NOT NULL COMMENT '菜单ID',
@@ -137,6 +148,7 @@ CREATE TABLE IF NOT EXISTS sys_role_menu (
   COLLATE utf8mb4_general_ci
   COMMENT='角色菜单关联';
 
+--changeset describeadmin:sys_role_dept
 -- 角色自定义数据权限的部门列表，只在对应角色 data_scope = 2（自定义部门）时有意义
 CREATE TABLE IF NOT EXISTS sys_role_dept (
   role_id BIGINT NOT NULL COMMENT '角色ID',
@@ -148,6 +160,7 @@ CREATE TABLE IF NOT EXISTS sys_role_dept (
   COLLATE utf8mb4_general_ci
   COMMENT='角色自定义数据权限部门关联';
 
+--changeset describeadmin:sys_dept
 CREATE TABLE IF NOT EXISTS sys_dept (
   id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
   parent_id    BIGINT      NOT NULL DEFAULT 0      COMMENT '父部门ID，0为根',
@@ -172,6 +185,7 @@ CREATE TABLE IF NOT EXISTS sys_dept (
   COLLATE utf8mb4_general_ci
   COMMENT='部门';
 
+--changeset describeadmin:sys_dict_type
 CREATE TABLE IF NOT EXISTS sys_dict_type (
   id           BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
   dict_type    VARCHAR(64) NOT NULL                COMMENT '字典类型编码',
@@ -191,6 +205,7 @@ CREATE TABLE IF NOT EXISTS sys_dict_type (
   COLLATE utf8mb4_general_ci
   COMMENT='字典类型';
 
+--changeset describeadmin:sys_dict_data
 CREATE TABLE IF NOT EXISTS sys_dict_data (
   id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   dict_type    VARCHAR(64)  NOT NULL                COMMENT '所属字典类型编码',
@@ -211,6 +226,7 @@ CREATE TABLE IF NOT EXISTS sys_dict_data (
   COLLATE utf8mb4_general_ci
   COMMENT='字典数据';
 
+--changeset describeadmin:sys_config
 CREATE TABLE IF NOT EXISTS sys_config (
   id           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   config_key   VARCHAR(128) NOT NULL                COMMENT '参数键',
@@ -231,6 +247,7 @@ CREATE TABLE IF NOT EXISTS sys_config (
   COLLATE utf8mb4_general_ci
   COMMENT='系统参数配置';
 
+--changeset describeadmin:sys_oper_log
 -- 只追加、由 OperLogAspect 写入，不继承 BaseEntity 的审计字段/逻辑删除/乐观锁语义
 -- （见 SysOperLog 的类注释），所以没有 create_by/update_by/update_time/deleted/version。
 CREATE TABLE IF NOT EXISTS sys_oper_log (
@@ -256,6 +273,7 @@ CREATE TABLE IF NOT EXISTS sys_oper_log (
   COLLATE utf8mb4_general_ci
   COMMENT='操作日志';
 
+--changeset describeadmin:sys_message
 -- 站内信。每个收件人一行（写扩散）。由 MessageSender 写入，收件人只读 / 标已读 / 删除，
 -- 不继承 BaseEntity 的审计字段/逻辑删除/乐观锁语义（见 SysMessage 的类注释）：
 -- 删除与「清空已读」都是物理删除，删掉后不保留"曾通知过此人"的凭据。

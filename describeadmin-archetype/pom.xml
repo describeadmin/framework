@@ -9,7 +9,7 @@
 
     它交付的不是"少敲几行 XML"，而是把两个【已实测的接入坑】固化成默认正确的初始状态：
       1. mysql-connector-j 版本被父 POM 的 dependencyManagement 覆盖 → 连 MySQL 5.7 直接失败
-      2. spring.sql.init.encoding 缺省 → 平台默认编码读脚本，中文全乱码而 COUNT(*) 正常
+      2. 迁移模式缺省为 validate（只检查）→ 本地空库首次启动即拒绝启动；local profile 显式写 apply
 
     与框架同仓、同版本发布：生成的 POM 里写的就是本模块的版本号（见 archetype-metadata.xml
     的 describeadminVersion 默认值 ${project.version}），两者必须同步，不允许各自演进。

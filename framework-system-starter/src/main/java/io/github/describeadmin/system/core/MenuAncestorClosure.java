@@ -67,7 +67,7 @@ public final class MenuAncestorClosure {
             // ——否则「授权成功但少了几条」会变成一种新的静默行为。
             closure.add(current);
             Long parent = parentById.get(current);
-            // parent_id = 0 是根（见 schema-rbac.sql 的 sys_menu.parent_id 注释）；
+            // parent_id = 0 是根（见 0001-rbac-schema.sql 的 sys_menu.parent_id 注释）；
             // 查不到则说明父节点不存在或已被逻辑删除，两种情况都到此为止。
             current = parent == null || parent == 0L ? null : parent;
         }

@@ -41,7 +41,7 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
 
     private static final Logger log = LoggerFactory.getLogger(SysUserService.class);
 
-    /** 参数键：密码历史不可重用数（&gt; 0 生效）。与 seed-rbac.sql 的内置参数对应。 */
+    /** 参数键：密码历史不可重用数（&gt; 0 生效）。与 0002-rbac-seed.sql 的内置参数对应。 */
     private static final String CFG_HISTORY_COUNT = "sys.password.history-count";
 
     private final SysRelationMapper relationMapper;
@@ -186,7 +186,7 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
      *
      * <p>{@code selfId} 是当前正在创建/编辑的用户自身 id：新建时传 {@code null}
      * （不存在"自己"），编辑时传当前 userId，排除"改别的字段但手机号没变"这种误判。
-     * 逻辑删除下不能建唯一索引（同 username，见 schema-rbac.sql 注释），唯一性只能在这里保证。
+     * 逻辑删除下不能建唯一索引（同 username，见 0001-rbac-schema.sql 注释），唯一性只能在这里保证。
      *
      * <p><b>⚠️ 本方法自身不加锁</b>，只回答"此刻这个手机号/邮箱可不可用"。并发唯一性
      * 由调用方负责：写入路径必须用 {@link #withMobileEmailLock} 把"校验 + 写入"包进
@@ -231,7 +231,7 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
      * 创建用户。
      *
      * <p>用户名唯一性在应用层校验而非数据库唯一索引——逻辑删除下建唯一索引会导致
-     * 删除后无法复用同名账号（见 schema-rbac.sql 的注释）。手机号/邮箱同理，见
+     * 删除后无法复用同名账号（见 0001-rbac-schema.sql 的注释）。手机号/邮箱同理，见
      * {@link #assertMobileEmailAvailable(Long, String, String)}。
      *
      * <p><b>并发唯一性由 {@link UniqueGuard} 保证</b>：username/mobile/email 各占一把

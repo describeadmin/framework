@@ -67,20 +67,13 @@ public abstract class AbstractMySqlIntegrationTest {
         registry.add("spring.datasource.password", MYSQL::getPassword);
         registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
 
-        // 由 Spring Boot 自动执行建表与种子脚本，保证每次测试拿到确定的初始状态
-        registry.add("spring.sql.init.mode", () -> "always");
-        // schema-rbac.sql / seed-rbac.sql 由 framework-system-starter 提供（在 classpath 上），
-        // 测试模块不复制。biz_project 是本模块自带的最小业务 fixture。
-        registry.add("spring.sql.init.schema-locations",
-                () -> "classpath:db/schema-rbac.sql,classpath:db/schema-biz_project.sql");
-        registry.add("spring.sql.init.data-locations",
-                () -> "classpath:db/seed-rbac.sql,classpath:db/menu-biz_project.sql");
-
-        // ⚠️ 必须显式指定，否则 Spring 用【平台默认编码】读取 SQL 脚本文件。
-        // 在中文 Windows 上默认是 GBK，会把 UTF-8 的脚本读坏，插进库里的中文全是乱码，
-        // 而行数校验完全正常 —— 这个坑本项目已经在两个不同入口各踩过一次
-        // （另一次是 docker-compose 的 seed-job，见 VERSION_BASELINE.md 发现 ④）。
-        registry.add("spring.sql.init.encoding", () -> "UTF-8");
+        // 建表与种子由框架的迁移层（Liquibase）在启动时执行，与业务方 local profile 同一条路径。
+        // 框架 changelog 在 framework-system-starter 的 jar 里；biz_project 是本模块自带的
+        // 最小业务 fixture，在 src/test/resources/db/changelog/app/ 下，靠 includeAll 扫到，不用登记。
+        // 中文是否被读坏由 MigrationIT 按字节断言——spring.sql.init 曾因「平台默认编码」把
+        // 中文静默写坏（VERSION_BASELINE.md 发现 ⑤），换了入口也要有测试钉住。
+        registry.add("describeadmin.migration.mode", () -> "apply");
+        registry.add("describeadmin.migration.contexts", () -> "local");
 
         // 种子不再写死 admin 口令：DevAdminSeeder 生成随机强口令，明文写到下面这个文件。
         // MYSQL 容器与 Spring 上下文全程共享 + seeder 幂等 → 文件只写一次，所有 IT 读同一份。

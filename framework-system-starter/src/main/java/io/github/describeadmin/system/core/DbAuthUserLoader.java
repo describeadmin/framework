@@ -30,7 +30,7 @@ import java.util.Set;
  */
 public class DbAuthUserLoader implements AuthUserLoader {
 
-    /** 参数键：密码有效期天数（&gt; 0 生效）。与 seed-rbac.sql 的内置参数对应。 */
+    /** 参数键：密码有效期天数（&gt; 0 生效）。与 0002-rbac-seed.sql 的内置参数对应。 */
     private static final String CFG_MAX_AGE_DAYS = "sys.password.max-age-days";
 
     private final SysUserService userService;

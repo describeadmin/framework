@@ -7,11 +7,11 @@
 #
 #   mvn spring-boot:run -Dspring-boot.run.profiles=local
 #
-# ⚠️ 仅供本地开发：每次启动都会重放建表与种子脚本。
+# ⚠️ 仅供本地开发：启动时自动执行数据库迁移（describeadmin.migration.mode=apply）。
 #    首次启动时 dev-seed 会创建管理员 admin，口令【随机生成】——见启动日志或项目根目录的
 #    .passwd 文件（已在 .gitignore 中）。仓库里没有任何固定默认口令。
-#    真实环境请另建 application-dev.yml / application-prod.yml，
-#    把 spring.sql.init.mode 设为 never，并且【不要】打开 describeadmin.system.dev-seed。
+#    真实环境请另建 application-dev.yml / application-prod.yml：迁移模式不写即为 validate
+#    （只检查、有未执行的变更就拒绝启动），并且【不要】打开 describeadmin.system.dev-seed。
 
 server:
   port: ${serverPort}
@@ -23,26 +23,15 @@ spring:
     password: ${dbPassword}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
-  sql:
-    init:
-      mode: always
-      # schema-rbac.sql / seed-rbac.sql 来自 framework-system-starter 这个 jar，
-      # 你的工程里没有、也不需要有这两个文件。
-      #
-      # 用 codegen 生成业务模块后，把它产出的两个 SQL 追加到这两行末尾：
-      #   schema-locations: ...,classpath:db/schema-biz_xxx.sql
-      #   data-locations:   ...,classpath:db/menu-biz_xxx.sql
-      # 漏掉 menu-*.sql 的症状极具欺骗性：接口全通，但页面在侧边栏里根本不出现
-      # —— 菜单是后端 sys_menu 表下发的。
-      schema-locations: classpath:db/schema-rbac.sql
-      data-locations: classpath:db/seed-rbac.sql
-      # ⚠️ 这一行【不能删】。
-      # 不写的话 Spring 用【平台默认编码】读 SQL 脚本，中文 Windows 上是 GBK，
-      # 会把 UTF-8 脚本读坏 —— 库里中文全是乱码，而 COUNT(*) 校验完全正常，
-      # 环境看起来非常健康，等发现时已经排查很久了。
-      encoding: UTF-8
-
 describeadmin:
+  migration:
+    # 启动时执行 src/main/resources/db/changelog/app/ 下所有未执行的 changelog。
+    # 建表、菜单都在这里：用 codegen 生成的模块会产出 db/changelog/app/<时间戳>__<表名>.sql，
+    # 放进去重启即可，【不需要在任何地方登记】。
+    # 其他取值：validate（默认，只检查）/ print-sql（生成 SQL 交给 DBA）/ print-sync-sql / off
+    mode: apply
+    # 运行时 contexts。只在本地执行的数据（如演示数据）标 context:local
+    contexts: local
   security:
     # 令牌有效期。本地调试放长一点，免得开着调试器就过期了
     token-ttl: 12h

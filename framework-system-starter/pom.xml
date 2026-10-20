@@ -74,6 +74,16 @@
       <artifactId>spring-boot-starter-aop</artifactId>
     </dependency>
 
+    <!--
+      数据库迁移（framework 的 sys_* 表与业务方 db/changelog/app/ 下的 changelog）。
+      版本由 spring-boot-dependencies 管理（3.5.x 对应 4.31.x，Apache 2.0；5.0 起改为 FSL）。
+      执行方式由框架接管，见 DescribeAdminLiquibase：默认只检查不执行。
+    -->
+    <dependency>
+      <groupId>org.liquibase</groupId>
+      <artifactId>liquibase-core</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-configuration-processor</artifactId>

@@ -20,7 +20,7 @@ import java.util.List;
  *
  * <p>{@code roleCode} 唯一性在应用层校验，而非数据库唯一索引——逻辑删除下建唯一索引
  * 会导致删除后无法复用同 code 角色，理由同 {@code SysUserService.username}（见
- * schema-rbac.sql 对应注释）。<b>并发唯一性由 {@link UniqueGuard} 的键级锁保证</b>。
+ * 0001-rbac-schema.sql 对应注释）。<b>并发唯一性由 {@link UniqueGuard} 的键级锁保证</b>。
  *
  * <p>角色名（{@code roleName}）是展示字段，允许重名——两个角色都叫"运营"是合法的，
  * 权限授予与引用走 {@code roleCode}。这一点与用户名不同：用户名是登录凭证，必须唯一。

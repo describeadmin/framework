@@ -13,9 +13,40 @@
 本次 `framework` 在 0.2.2 里叠加三块内容：一个会崩溃的 bug 修复、整套锁能力，
 以及「隐藏菜单」——`api/` 包只增不改（新增 `LockOperations` / `LockHandle` /
 `DistributedLock` / `LockStrategy`），`0.2.x` 接入方直接升级即可，
-但 `sys_menu` 有一处**行为语义变更 + 一列新增**，存量库需手动 `ALTER TABLE`，见下。
+但 `sys_menu` 有一处**行为语义变更 + 一列新增**，见下。
+
+0.2.2 还把数据库管理从 `spring.sql.init` 换成了 **Liquibase**（见 Breaking Changes 第一条）：
+本版本及之后的表结构变更都随 jar 带来。**1.0 之前的版本按测试版对待，迁移层不为它们建的库做任何兼容**：
+0.2.1 及更早版本建的库要先手动补两列（见 Breaking Changes 第一条），或者直接重建。
 
 ### Breaking Changes
+
+- **数据库管理由 `spring.sql.init` 改为 Liquibase，由框架接管执行**。
+  - `schema-rbac.sql` / `seed-rbac.sql` 删除，改为 `framework-system-starter` 里的 changelog
+    `db/changelog/describeadmin/0001-rbac-schema.sql`（表结构）与 `0002-rbac-seed.sql`（种子），
+    由主 changelog `db/changelog/describeadmin-master.yaml` 串起来。
+  - 业务方的建表 / 加列 / 菜单 / 字典改放 `src/main/resources/db/changelog/app/`
+    （文件名 `<yyyyMMddHHmm>__<描述>.sql`，首行必须 `--liquibase formatted sql logicalFilePath:app/<文件名>`），
+    启动时按文件名顺序执行，**不再需要登记 `schema-locations` / `data-locations`**。
+  - 启动时做什么由新配置 `describeadmin.migration.mode` 决定：`apply` / `validate`（**默认**）/
+    `print-sql` / `print-sync-sql` / `off`。默认只检查不执行：有未执行的 changeset 就拒绝启动并列出。
+    生产可用 `print-sql` 生成 SQL 交给 DBA，或显式 `apply`。Spring Boot 的 `spring.liquibase.*` 不生效。
+  - **升级动作**：`application-local.yml` 删掉整段 `spring.sql.init`（与迁移同开会拒绝启动），
+    加 `describeadmin.migration.mode: apply` 与 `contexts: local`；把自己的 `schema-*.sql` / `menu-*.sql`
+    等转成 `db/changelog/app/` 下的 changelog。生产配置删掉 `spring.sql.init.mode: never`。
+  - **0.2.1 及更早版本建的库，升级前必须手动执行下面两条 ALTER**。建表 changeset 是
+    `CREATE TABLE IF NOT EXISTS`，表已存在时整条跳过、**不会补列**；迁移照常通过、应用照常启动，
+    到登录时才报 `Unknown column 'avatar'`，症状不指向缺列：
+
+    ```sql
+    ALTER TABLE sys_user ADD COLUMN avatar VARCHAR(191) NULL COMMENT '头像对象键' AFTER email;
+    ALTER TABLE sys_menu ADD COLUMN active_path VARCHAR(191) NULL COMMENT '侧边栏高亮路径，隐藏页面填其所属菜单的 path' AFTER visible;
+    ```
+
+    补完列后第一次迁移即可：种子是 `INSERT ... WHERE NOT EXISTS`，已有的跳过；`sys_message` 是新表，
+    随迁移建出。生产库建议先 `print-sql` 看一眼。
+  - 新增依赖 `org.liquibase:liquibase-core`（版本由 Spring Boot 3.5 管理，4.31.x，Apache 2.0）。
+    匿名使用数据上报已关闭。
 
 - **`sys_menu.visible = 0` 的语义从「停用」变成「隐藏」**。此前
   `SysMenuService.treeOf()` 按 `visible = 1` 过滤，`visible = 0` 的菜单根本不下发，
@@ -23,15 +54,7 @@
   **能不能访问完全由角色授权决定**。若既有部署把 `visible = 0` 当停用开关用，
   升级后这些页面会变得可访问（前提是该菜单仍授权给了对应角色）——
   升级前请检查 `SELECT * FROM sys_menu WHERE visible = 0` 并按需取消授权。
-- **`sys_menu` 新增 `active_path` 列**。`schema-rbac.sql` 是
-  `CREATE TABLE IF NOT EXISTS`，存量库不会自动加列，需手动执行：
-
-  ```sql
-  ALTER TABLE sys_menu ADD COLUMN active_path VARCHAR(191) NULL
-    COMMENT '侧边栏高亮路径' AFTER visible;
-  ```
-
-  （同类先例：`sys_user.mobile` / `sys_dept.ancestors` / `sys_role.home_path`）
+- **`sys_menu` 新增 `active_path` 列**。0.2.1 及更早版本建的库需手动 ALTER（见第一条）。
 - （`SysRoleService.save/updateById` 现在会拒绝重复 `roleCode`——严格说这是
   新增校验而非破坏：此前连校验都没有，重复角色标识能正常落库，属于漏洞修复）
 - **`SysRoleService.assignMenus` 现在把入参闭包到全部祖先**，因此
@@ -59,24 +82,15 @@
   业主自建的、只授了 `:edit` 的角色会失去这三项能力，在「分配菜单」里补勾对应按钮即可，
   勾选后需重新登录才生效（权限快照在登录时定格）。
 
-- **`sys_user` 新增 `avatar` 列**（用户头像）。存量库需手动执行：
-
-  ```sql
-  ALTER TABLE sys_user ADD COLUMN avatar VARCHAR(191) NULL
-    COMMENT '头像对象键' AFTER email;
-  ```
-
-  **升级前必须执行**：MyBatis-Plus 生成的查询会显式列出实体的全部列，不加列的话
-  登录、用户列表都会报「Unknown column 'avatar'」。
+- **`sys_user` 新增 `avatar` 列**（用户头像）。0.2.1 及更早版本建的库需手动 ALTER（见第一条）。
+  缺这一列时 MyBatis-Plus 生成的查询会报「Unknown column 'avatar'」、登录直接失败。
 - **`GET /api/auth/me` 的响应多出一个 `profile` 对象**（`nickname` / `email` / `avatar`，实时读库）。
   `LoginUser` 的字段仍原样平铺在顶层，只读既有字段的调用方不受影响；
   按字段白名单严格校验响应体的调用方需要放行 `profile`。
 
-- **新增 `sys_message` 表**（站内信）。`schema-rbac.sql` 是 `CREATE TABLE IF NOT EXISTS`，
-  `spring.sql.init.mode=always` 的环境启动时会自动建；生产环境（`never`）需手动执行
-  `schema-rbac.sql` 末尾那段 `CREATE TABLE IF NOT EXISTS sys_message ...`。
-  不建表的话登录不受影响，但顶栏铃铛的轮询会持续报错（前端已静默，见后端日志）。
-  `seed-rbac.sql` 另补了一条字典类型 `sys_message_category`（幂等，可重复执行）。
+- **新增 `sys_message` 表**（站内信），随迁移建出。不建表的话登录不受影响，
+  但顶栏铃铛的轮询会持续报错（前端已静默，见后端日志）。
+  种子另补了一条字典类型 `sys_message_category`。
 
 - **默认验证码由图形字符改为 PoW（工作量证明）**，`GET /api/auth/captcha` 默认返回
   `type: "pow"`。自己写登录页、只认 `type === "image"` 的前端会拿不到图片——要么按下面

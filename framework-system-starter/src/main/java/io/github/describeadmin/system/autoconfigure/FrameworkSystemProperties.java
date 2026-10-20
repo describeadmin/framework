@@ -102,7 +102,7 @@ public class FrameworkSystemProperties {
         /** 种子管理员的用户名。 */
         private String adminUsername = "admin";
 
-        /** 绑定的角色标识，必须是 seed-rbac.sql 已建好的 {@code sys_role.role_code}。 */
+        /** 绑定的角色标识，必须是 0002-rbac-seed.sql 已建好的 {@code sys_role.role_code}。 */
         private String adminRoleCode = "ADMIN";
 
         public boolean isEnabled() {

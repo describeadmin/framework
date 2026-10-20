@@ -1,21 +1,24 @@
+--liquibase formatted sql logicalFilePath:describeadmin/0002-rbac-seed.sql
+
 -- =============================================================================
--- describe-admin RBAC 初始数据
+-- describe-admin RBAC 结构数据
 --
--- 用途：本地开发与自动化测试的确定性初始状态（develop_plan.md 5.1 的 seed-job）。
--- 语法基线同 schema-rbac.sql：MySQL 5.7 安全子集。
---
--- ⚠️ 生产环境禁止直接使用本文件。本文件只播种「结构数据」（角色 / 菜单 / 权限 / 根部门 /
---    内置参数）——这些结构可以随开发库一起带到正式环境。
+-- 只播种「结构数据」（角色 / 菜单 / 权限 / 根部门 / 内置参数），所有环境都执行，
+-- 生产也一样——菜单与权限点和代码是同一个版本的东西，缺了页面就不可达。
+-- 语法基线同 0001-rbac-schema.sql：MySQL 5.7 安全子集。
 --
 -- ⚠️ 默认管理员 admin 及其口令【不在本文件里】：由 framework-system-starter 的
 --    DevAdminSeeder 在 describeadmin.system.dev-seed.enabled=true 时生成一个随机强口令，
 --    BCrypt 入库，明文写到项目根 .passwd 并打印到启动日志。因此不再存在任何固定默认口令。
 --    DevAdminSeeder 依赖本文件先建好 role_code = 'ADMIN' 这一行。
 --
--- 幂等性：全部使用 INSERT ... SELECT ... WHERE NOT EXISTS，可重复执行。
+-- runOnChange：本文件内容变了就整体重跑一次（新增菜单直接往这里加），所以每条语句都必须幂等：
+--         全部使用 INSERT ... SELECT ... WHERE NOT EXISTS。
 --         不使用 INSERT IGNORE（依赖唯一索引，而本 schema 因逻辑删除未建唯一索引），
 --         也不使用 ON DUPLICATE KEY UPDATE（同理）。
 -- =============================================================================
+
+--changeset describeadmin:rbac-seed runOnChange:true
 
 -- data_scope = 1（全部）：不在代码里特判 role_code = 'ADMIN'，与"ADMIN 靠种子数据
 -- 授予全部菜单"是同一手法——种子数据决定 ADMIN 是超级管理员，不是代码里的特例分支。

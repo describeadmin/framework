@@ -38,9 +38,9 @@ curl -s -X POST http://localhost:8090/api/auth/login \
   -d "{\"username\":\"admin\",\"password\":\"$(cat .passwd)\"}"
 ```
 
-> ⚠️ `local` profile 每次启动重放种子脚本、并用 `dev-seed` 建随机口令的管理员，
+> ⚠️ `local` profile 启动时自动执行数据库迁移、并用 `dev-seed` 建随机口令的管理员，
 > **只能用于本地开发**。真实环境另建 `application-dev.yml` / `application-prod.yml`，
-> 把 `spring.sql.init.mode` 设为 `never`，并且**不要**打开 `describeadmin.system.dev-seed`。
+> **不要**打开 `describeadmin.system.dev-seed`；迁移怎么做见下面「上生产」一节。
 > 管理员为其他用户建号 / 重置密码后，对方首次登录会被要求先改密。
 
 ## 对 JDK 的要求
@@ -59,30 +59,29 @@ Maven 跑在 JDK 11 上会在打包阶段报一个指向 `RepackageMojo` 的错
 产物侧由 `pom.xml` 的 `<java.version>17</java.version>` 钉死：无论你用多新的 JDK 构建，
 产出的字节码都能在 Java 17 上运行。
 
-## pom.xml 里两行不能删的东西
+## pom.xml 里不能删的一行
 
-它们不是风格问题，是两个**已实测的失败**，共同特征是报错与真实原因相距很远：
+`<mysql.version>8.2.0</mysql.version>` 不是风格问题，是一个**已实测的失败**：
+继承来的 `dependencyManagement` 优先级高于 import 的 BOM，驱动被换成新版，
+**连 MySQL 5.7 直接失败**（Connector/J 自 8.3.0 起官方不再支持 5.7），而报错与这个原因相距很远。
 
-| 哪一行 | 删了会怎样 |
-|---|---|
-| `<mysql.version>8.2.0</mysql.version>` | 继承来的 `dependencyManagement` 优先级高于 import 的 BOM，驱动被换成新版，**连 MySQL 5.7 直接失败**。Connector/J 自 8.3.0 起官方不再支持 5.7 |
-| `application-local.yml` 的 `encoding: UTF-8` | Spring 用平台默认编码读 SQL 脚本，中文 Windows 上是 GBK，**库里中文全是乱码而 `COUNT(*)` 完全正常** |
-
-第二条引出一条测试纪律：**断言要比对具体值，不要只比对行数**。
+顺带一条测试纪律：**断言要比对具体值，不要只比对行数**。
 `assertThat(count).isEqualTo(1)` 查不出字符集问题，
 `assertThat(nickname).isEqualTo("超级管理员")` 才可以。
 
 ## 加一个业务模块
 
 用 [codegen](https://github.com/describeadmin/codegen/releases) 从一份 YAML 同时产出
-后端四件套 + 建表 SQL + 菜单 SQL + 前端页面：
+后端四件套 + 数据库变更 + 前端页面：
 
 ```bash
 java -jar codegen.jar codegen-specs/order.yaml --out .
 ```
 
-生成后**必须**把两个 SQL 登记进 `application-local.yml` 的
-`schema-locations` / `data-locations`，否则页面在侧边栏里不会出现（菜单由后端 `sys_menu` 表下发）。
+数据库变更是 `src/main/resources/db/changelog/app/<时间戳>__<表名>.sql`（Liquibase formatted SQL，
+建表与菜单都在里面），重启后由框架自动执行，**不需要在任何地方登记**。
+之后要加列 / 改列，在同一目录**新建**一个 `<yyyyMMddHHmm>__<描述>.sql`，不要改已执行过的建表语句——
+改了的话校验和对不上，所有已建库的环境都会拒绝启动。
 
 业务代码写成"薄"的：通用逻辑在框架基类里，审计字段由 `BaseEntity` 承担，不要重复定义。
 
@@ -93,8 +92,19 @@ public class OrderService extends BaseService<OrderMapper, OrderEntity> { }
 public class OrderController extends BaseController<OrderService, OrderEntity> { }
 ```
 
+## 上生产
+
+`describeadmin.migration.mode` 不配置时是 `validate`：启动时只检查，有未执行的数据库变更就拒绝启动，
+并列出缺了哪些。两种处理方式：
+
+- **交给 DBA**：在能连生产库的机器上，用同一个 jar 加生产配置执行
+  `java -jar app.jar --spring.profiles.active=prod --describeadmin.migration.mode=print-sql`，
+  生成待执行的 SQL 后进程即退出、不改库。DBA 审阅并执行后，正常启动即可。
+- **由应用执行**：用 `--describeadmin.migration.mode=apply` 启动一次。
+
 ## 升级框架
 
 改 `pom.xml` 里 `<describeadmin.version>` 一行。生成的业务代码不用动。
+框架自己的表结构变更随框架 jar 一起带来，和业务变更走同一套迁移流程，不需要再手动执行 ALTER。
 
 更多内容见 [describeadmin 文档](https://github.com/describeadmin/docs)。

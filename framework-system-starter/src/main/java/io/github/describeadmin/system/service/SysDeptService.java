@@ -56,7 +56,7 @@ public class SysDeptService extends BaseService<SysDeptMapper, SysDept> {
     private static List<OptionItem> toOptions(List<SysDept> nodes) {
         List<OptionItem> options = new ArrayList<>(nodes.size());
         for (SysDept node : nodes) {
-            // status：1 启用 / 0 禁用（schema-rbac.sql）。null 按启用处理，与列的 DEFAULT 1 一致
+            // status：1 启用 / 0 禁用（0001-rbac-schema.sql）。null 按启用处理，与列的 DEFAULT 1 一致
             OptionItem option = OptionItem.of(node.getId(), node.getDeptName(),
                     node.getStatus() != null && node.getStatus() == 0);
             option.getChildren().addAll(toOptions(node.getChildren()));

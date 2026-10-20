@@ -172,8 +172,11 @@ jobs:
 
           grep -q '<mysql.version>8.2.0</mysql.version>' pom.xml \
             || { echo "::error::pom.xml 缺少 mysql.version 覆盖，连 MySQL 5.7 会直接失败"; fail=1; }
-          grep -q 'encoding: UTF-8' src/main/resources/application-local.yml \
-            || { echo "::error::application-local.yml 缺少 spring.sql.init.encoding"; fail=1; }
+          grep -q 'mode: apply' src/main/resources/application-local.yml \
+            || { echo "::error::application-local.yml 缺少 describeadmin.migration.mode: apply（迁移默认只检查，本地空库会拒绝启动）"; fail=1; }
+          if grep -qE '^ *(sql|init):' src/main/resources/application-local.yml; then
+            echo "::error::application-local.yml 不应再有 spring.sql.init（建表已由 Liquibase 负责，两者同开会拒绝启动）"; fail=1
+          fi
           grep -q 'dev-seed' src/main/resources/application-local.yml \
             || { echo "::error::application-local.yml 缺少 describeadmin.system.dev-seed（否则本地起来没有管理员）"; fail=1; }
           grep -q '^\.passwd' .gitignore \
@@ -207,7 +210,8 @@ jobs:
           u = d['data']['user']
           assert d['data']['token'], '令牌为空'
           # 不看控制台渲染 —— 终端代码页会把好数据显示成乱码，也会把坏数据显示成正常。
-          # 只认字节：这是唯一能查出 spring.sql.init.encoding 缺失的办法
+          # 只认字节：这是唯一能查出 changelog 被按错误编码读取的办法（行数永远是对的）。
+          # 这一步同时验证了 includeAll 在 fat jar（java -jar）里能扫到框架 jar 内的 changelog
           assert u['nickname'].encode('utf-8').hex() == 'e8b685e7baa7e7aea1e79086e59198', u['nickname']
           assert 'ADMIN' in u['roles'], u['roles']
           assert len(u['permissions']) >= 20, len(u['permissions'])
