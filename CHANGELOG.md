@@ -7,17 +7,23 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
-## 0.2.2 (2026-09-07)
+## 1.0.0 (未发布)
 
-`codegen` 已于 2026-09-03 单独发过 `0.2.2`（当时 `framework` 无改动、破例不同号）。
-本次 `framework` 在 0.2.2 里叠加三块内容：一个会崩溃的 bug 修复、整套锁能力，
-以及「隐藏菜单」——`api/` 包只增不改（新增 `LockOperations` / `LockHandle` /
-`DistributedLock` / `LockStrategy`），`0.2.x` 接入方直接升级即可，
-但 `sys_menu` 有一处**行为语义变更 + 一列新增**，见下。
+**第一个正式版。** 自本版本起严格遵循 SemVer：`api/` 包的 public 签名只在大版本变更，
+废弃接口先标 `@Deprecated` 并至少保留 1–2 个小版本。
 
-0.2.2 还把数据库管理从 `spring.sql.init` 换成了 **Liquibase**（见 Breaking Changes 第一条）：
-本版本及之后的表结构变更都随 jar 带来。**1.0 之前的版本按测试版对待，迁移层不为它们建的库做任何兼容**：
+本版本包含原计划作为 `0.2.2` 发布的全部内容（`0.2.2` 从未发到 Maven Central，直接并入 1.0.0）。
+框架、`codegen`、前端 `@describeadmin/*` 与全部插件统一以 `1.0.0` 发布；此后插件仍按自己的版本线演进。
+
+相对 0.2.1 的主要内容：一个会崩溃的 bug 修复、整套锁能力、「隐藏菜单」、站内信、用户头像、
+渐进式验证码（IP / 全局维度 + PoW）、前端按钮级权限所需的权限点对齐，以及数据库管理改用 **Liquibase**
+（见 Breaking Changes 第一条）。`api/` 包只增不改（新增 `LockOperations` / `LockHandle` /
+`DistributedLock` / `LockStrategy`、`OptionItem`、`MessageSender` 等）。
+
+**1.0 之前的版本按测试版对待，迁移层不为它们建的库做任何兼容**：
 0.2.1 及更早版本建的库要先手动补两列（见 Breaking Changes 第一条），或者直接重建。
+插件的 `FrameworkVersion.requireCompatible` 跨主版本即拒绝启动——**0.x 的插件不能用在 1.0.0 框架上**，
+请同时把插件升到 1.0.0。
 
 ### Breaking Changes
 
@@ -166,10 +172,10 @@
   再用新增的 `active_path` 列指定侧边栏高亮落在哪一项（通常填所属列表页的 `path`），
   否则进入该页后侧边栏无任何选中态、面包屑断在父级。权限点复用列表页的
   `xxx:add` / `xxx:edit`，不新建；该菜单必须在角色授权树里勾选，否则拿不到路由。
-- `framework-cache-redis-starter` 0.2.2：新增 `RedisLockOperations`，锁键前缀
+- `framework-cache-redis-starter` 1.0.0：新增 `RedisLockOperations`，锁键前缀
   取框架的 `describeadmin.lock.key-prefix`（不叠加插件自己的缓存前缀），
   内存/Redis 两实现产出完全相同的键名，替换实现不改变锁语义。
-  `REQUIRED_FRAMEWORK_VERSION` 上调至 `0.2.2`（锁 SPI 的引入版本）。
+  `REQUIRED_FRAMEWORK_VERSION` 上调至 `1.0.0`（锁 SPI 随本版本引入）。
 - **在线用户页标出「当前」会话**。同一账号多浏览器登录、或同一浏览器没登出就重新登录，
   列表里会有多条同名会话，此前分不出哪条是自己正在用的。`GET /api/system/online`
   的每条记录新增 `sessionId` 与 `current`：`sessionId` 是令牌的 SHA-256 摘要（前 128 位），
@@ -177,7 +183,7 @@
   `api/` 只增不改：`ActiveSession` 新增 `getSessionId()`、带 `sessionId` 的构造器与静态
   `sessionIdOf(token)`，旧构造器保留——业务方自定义的 `TokenStore` 不改也能编译，
   只是 `sessionId` 为 null、没有任何一条会被标为当前。`InMemoryTokenStore` 与
-  `framework-cache-redis-starter` 的 `RedisTokenStore` 已提供（插件仍要求框架 0.2.2，不变）。
+  `framework-cache-redis-starter` 的 `RedisTokenStore` 已提供（插件要求框架 1.0.0）。
   前端顺带把表格 `row-key` 从不唯一的 `userId` 换成 `sessionId`；对自己所属账号点
   「强制下线」时确认框会提示当前登录也会失效。
 

@@ -6,7 +6,7 @@
 mvn archetype:generate -B \
   -DarchetypeGroupId=io.github.describeadmin \
   -DarchetypeArtifactId=describeadmin-archetype \
-  -DarchetypeVersion=0.2.1 \
+  -DarchetypeVersion=1.0.0 \
   -DgroupId=com.acme \
   -DartifactId=order-server \
   -Dpackage=com.acme.order

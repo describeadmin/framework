@@ -42,6 +42,9 @@ class FrameworkVersionTest {
     @DisplayName("兼容性判定")
     class Compatibility {
 
+        /** 用例按当前主版本推出参照版本，不写死某个版本号——否则每跨一个大版本就要改测试。 */
+        private final int major = Integer.parseInt(FrameworkVersion.current().split("\\.")[0]);
+
         @Test
         @DisplayName("框架版本与要求一致时放行")
         void sameVersionPasses() {
@@ -63,7 +66,7 @@ class FrameworkVersionTest {
         @Test
         @DisplayName("主版本不同时启动失败——跨大版本的破坏性变更是被允许的，不能假设兼容")
         void differentMajorFails() {
-            assertThatThrownBy(() -> FrameworkVersion.requireCompatible("test-plugin", "1.0.0"))
+            assertThatThrownBy(() -> FrameworkVersion.requireCompatible("test-plugin", (major + 1) + ".0.0"))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("主版本不同");
         }
@@ -73,7 +76,7 @@ class FrameworkVersionTest {
         void newerFrameworkPasses() {
             // 一律拒绝会让每个框架小版本都逼所有插件重新发一遍
             assertThatNoException().isThrownBy(
-                    () -> FrameworkVersion.requireCompatible("test-plugin", "0.0.1"));
+                    () -> FrameworkVersion.requireCompatible("test-plugin", major + ".0.0"));
         }
 
         @Test
@@ -89,7 +92,7 @@ class FrameworkVersionTest {
         @DisplayName("SNAPSHOT 后缀不影响判定")
         void snapshotSuffixIgnored() {
             assertThatNoException().isThrownBy(
-                    () -> FrameworkVersion.requireCompatible("test-plugin", "0.0.1-SNAPSHOT"));
+                    () -> FrameworkVersion.requireCompatible("test-plugin", major + ".0.0-SNAPSHOT"));
             assertThatThrownBy(() -> FrameworkVersion.requireCompatible("test-plugin", "99.0.0-SNAPSHOT"))
                     .isInstanceOf(IllegalStateException.class);
         }

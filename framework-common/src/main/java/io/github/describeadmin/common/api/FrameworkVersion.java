@@ -41,7 +41,7 @@ public final class FrameworkVersion {
     }
 
     /**
-     * @return 当前运行的框架版本，如 {@code 0.2.0} 或 {@code 0.2.0-SNAPSHOT}；
+     * @return 当前运行的框架版本，如 {@code 1.0.0} 或 {@code 1.0.1-SNAPSHOT}；
      *         读不到时返回 {@link #UNKNOWN}
      */
     public static String current() {
