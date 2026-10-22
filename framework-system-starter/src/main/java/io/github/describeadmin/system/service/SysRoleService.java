@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
@@ -31,12 +32,14 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
     private final SysRelationMapper relationMapper;
     private final UniqueGuard uniqueGuard;
     private final SysMenuService menuService;
+    private final GrantCeiling grantCeiling;
 
     public SysRoleService(SysRelationMapper relationMapper, UniqueGuard uniqueGuard,
-                          SysMenuService menuService) {
+                          SysMenuService menuService, GrantCeiling grantCeiling) {
         this.relationMapper = relationMapper;
         this.uniqueGuard = uniqueGuard;
         this.menuService = menuService;
+        this.grantCeiling = grantCeiling;
     }
 
     /**
@@ -114,6 +117,8 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
     @Transactional(rollbackFor = Exception.class)
     public void assignMenus(Long roleId, List<Long> menuIds) {
         List<Long> effective = menuService.withAncestors(menuIds);
+        // 上限按闭包之后的集合比对：闭包补出来的祖先同样是授出去的权限点
+        grantCeiling.checkMenuChange(menuIdsOf(roleId), effective);
         relationMapper.deleteRoleMenus(roleId);
         if (!effective.isEmpty()) {
             relationMapper.insertRoleMenus(roleId, effective);
@@ -122,6 +127,26 @@ public class SysRoleService extends BaseService<SysRoleMapper, SysRole> {
 
     public List<Long> menuIdsOf(Long roleId) {
         return relationMapper.selectMenuIdsByRoleId(roleId);
+    }
+
+    /**
+     * 删除角色。仍分配给用户的角色拒绝删除——删掉的话这些用户的权限会在下次登录时静默消失，
+     * 界面上看不出任何原因。删除成功后顺手清掉菜单与数据权限关联，不留孤儿数据。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean removeById(Serializable id) {
+        Long roleId = Long.valueOf(String.valueOf(id));
+        long holders = relationMapper.countUsersByRoleId(roleId);
+        if (holders > 0) {
+            throw new BizException(ResultCode.BAD_REQUEST, "角色已分配给 " + holders + " 个用户，请先取消分配再删除");
+        }
+        boolean removed = super.removeById(id);
+        if (removed) {
+            relationMapper.deleteRoleMenus(roleId);
+            relationMapper.deleteRoleDepts(roleId);
+        }
+        return removed;
     }
 
     /**

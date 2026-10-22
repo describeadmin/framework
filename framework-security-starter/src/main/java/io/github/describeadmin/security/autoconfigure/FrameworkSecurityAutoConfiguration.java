@@ -13,6 +13,7 @@ import io.github.describeadmin.security.api.PermitAllContributor;
 import io.github.describeadmin.security.api.TokenStore;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.CaptchaGuard;
+import io.github.describeadmin.security.core.CaptchaIssueThrottle;
 import io.github.describeadmin.security.core.DefaultPasswordPolicy;
 import io.github.describeadmin.security.core.ImageCaptchaProvider;
 import io.github.describeadmin.security.core.InMemoryTokenStore;
@@ -138,6 +139,24 @@ public class FrameworkSecurityAutoConfiguration {
         throw new IllegalStateException("describeadmin.security.captcha.type 只支持 "
                 + FrameworkSecurityProperties.Captcha.TYPE_POW + " / "
                 + FrameworkSecurityProperties.Captcha.TYPE_IMAGE + "，当前为: " + type);
+    }
+
+    /**
+     * 验证码签发频率限制。与验证码总开关无关：端点始终可用，就始终需要限流。
+     * {@code describeadmin.security.captcha.issue.enabled=false} 时不注册，端点不再限流。
+     */
+    @Bean
+    @ConditionalOnMissingBean(CaptchaIssueThrottle.class)
+    @ConditionalOnProperty(prefix = "describeadmin.security.captcha.issue", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public CaptchaIssueThrottle captchaIssueThrottle(CacheProvider cacheProvider,
+                                                     FrameworkSecurityProperties properties) {
+        FrameworkSecurityProperties.RiskDimension issue = properties.getCaptcha().getIssue();
+        try {
+            return new CaptchaIssueThrottle(cacheProvider, issue.getThreshold(), issue.getWindow());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("describeadmin.security.captcha.issue 配置无效: " + e.getMessage(), e);
+        }
     }
 
     /**

@@ -73,6 +73,19 @@ class AuditMetaObjectHandlerClockTest {
     }
 
     @Test
+    @DisplayName("updateFill 覆盖请求体带来的更新人与更新时间，不是为空才填")
+    void updateOverwritesClientSuppliedValues() {
+        AuditedEntity entity = new AuditedEntity();
+        entity.setUpdateBy(999_999L);
+        entity.setUpdateTime(LocalDateTime.of(2000, 1, 1, 0, 0));
+
+        new AuditMetaObjectHandler(() -> 7L, FIXED_CLOCK).updateFill(SystemMetaObject.forObject(entity));
+
+        assertThat(entity.getUpdateBy()).isEqualTo(7L);
+        assertThat(entity.getUpdateTime()).isEqualTo(FIXED);
+    }
+
+    @Test
     @DisplayName("时钟推进后填充的时间跟着走，证明确实是从时钟读的")
     void followsClockAdvance() {
         Instant later = FIXED.atZone(ZoneId.systemDefault()).toInstant().plusSeconds(3600);

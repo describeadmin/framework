@@ -52,12 +52,13 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
     private final SysUserPasswordHistoryMapper passwordHistoryMapper;
     private final SysConfigService configService;
     private final UniqueGuard uniqueGuard;
+    private final GrantCeiling grantCeiling;
     private final TransactionOperations transactionOperations;
 
     public SysUserService(SysRelationMapper relationMapper, SysDeptMapper deptMapper,
                           PasswordEncoder passwordEncoder, TokenStore tokenStore,
                           PasswordPolicy passwordPolicy, SysUserPasswordHistoryMapper passwordHistoryMapper,
-                          SysConfigService configService, UniqueGuard uniqueGuard,
+                          SysConfigService configService, UniqueGuard uniqueGuard, GrantCeiling grantCeiling,
                           ObjectProvider<TransactionTemplate> transactionTemplateProvider) {
         this.relationMapper = relationMapper;
         this.deptMapper = deptMapper;
@@ -67,6 +68,7 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
         this.passwordHistoryMapper = passwordHistoryMapper;
         this.configService = configService;
         this.uniqueGuard = uniqueGuard;
+        this.grantCeiling = grantCeiling;
         this.transactionOperations = resolveTransactionOperations(transactionTemplateProvider);
     }
 
@@ -266,6 +268,8 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
         }
         assertMobileEmailAvailable(null, user.getMobile(), user.getEmail());
         passwordPolicy.validate(rawPassword, user.getUsername());
+        // 建号带角色走的是同一条授权路径：不在这里设上限，"新建一个带 ADMIN 的号、自己设初始密码"就能绕过
+        grantCeiling.checkRoleChange(List.of(), roleIds);
         String encoded = passwordEncoder.encode(rawPassword);
         user.setId(null);
         user.setPassword(encoded);
@@ -276,7 +280,7 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
         user.setPwdResetRequired(1);
         user.setPwdUpdateTime(LocalDateTime.now());
         save(user);
-        assignRoles(user.getId(), roleIds);
+        replaceRoles(user.getId(), roleIds);
         recordPasswordHistory(user.getId(), encoded);
         return user;
     }
@@ -445,9 +449,20 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
             return updateById(entity);
         }));
     }
-    /** 重新授予角色：先清空再插入，是"重建"而非"增量修改"。 */
+    /**
+     * 重新授予角色：先清空再插入，是"重建"而非"增量修改"。
+     *
+     * <p>目标用户必须在操作者的数据权限范围内（同 {@link #resetPassword}），
+     * 增删的角色受授权上限约束（见 {@link GrantCeiling}）。
+     */
     @Transactional(rollbackFor = Exception.class)
     public void assignRoles(Long userId, List<Long> roleIds) {
+        requireVisible(userId);
+        grantCeiling.checkRoleChange(roleIdsOf(userId), roleIds);
+        replaceRoles(userId, roleIds);
+    }
+
+    private void replaceRoles(Long userId, List<Long> roleIds) {
         relationMapper.deleteUserRoles(userId);
         if (roleIds != null && !roleIds.isEmpty()) {
             relationMapper.insertUserRoles(userId, roleIds);
@@ -456,5 +471,37 @@ public class SysUserService extends BaseService<SysUserMapper, SysUser> {
 
     public List<Long> roleIdsOf(Long userId) {
         return relationMapper.selectRoleIdsByUserId(userId);
+    }
+
+    /**
+     * 取操作者看得见的用户：{@code getById} 经过数据权限过滤，查不到就是不存在或不在可见范围内，
+     * 两种情况一律 404，不区分——区分了就等于告诉调用方"这个 id 存在，只是你看不到"。
+     */
+    public SysUser requireVisible(Long userId) {
+        SysUser user = userId == null ? null : getById(userId);
+        if (user == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "用户不存在: " + userId);
+        }
+        return user;
+    }
+
+    /**
+     * 删除用户（逻辑删除），并立即吊销其全部令牌、清掉角色关联。
+     *
+     * <p>不吊销的话，被删账号已登录的会话在令牌自然过期前照常可用，refresh token 还能继续续期——
+     * 与禁用、重置密码的"立即失效"不一致。不允许删除当前登录账号：删完自己的会话当场失效，
+     * 而且多半是误操作。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteUser(Long userId) {
+        requireVisible(userId);
+        if (userId.equals(grantCeiling.operatorId())) {
+            throw new BizException(ResultCode.BAD_REQUEST, "不能删除当前登录的账号");
+        }
+        if (!removeById(userId)) {
+            throw new BizException(ResultCode.NOT_FOUND, "用户不存在: " + userId);
+        }
+        relationMapper.deleteUserRoles(userId);
+        tokenStore.revokeAllOf(userId);
     }
 }

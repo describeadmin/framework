@@ -54,6 +54,21 @@ public interface SysRelationMapper {
     @Select("SELECT rm.menu_id FROM sys_role_menu rm WHERE rm.role_id = #{roleId}")
     List<Long> selectMenuIdsByRoleId(@Param("roleId") Long roleId);
 
+    /**
+     * 某角色当前<b>生效</b>的菜单：排除已逻辑删除的菜单，口径与 {@link #selectMenuIdsByUserId} 一致。
+     * 授权上限比对两个集合时必须同口径，否则角色里残留的已删菜单会造成误判。
+     */
+    @Select("SELECT rm.menu_id FROM sys_role_menu rm "
+            + "JOIN sys_menu m ON m.id = rm.menu_id "
+            + "WHERE rm.role_id = #{roleId} AND m.deleted = 0")
+    List<Long> selectLiveMenuIdsByRoleId(@Param("roleId") Long roleId);
+
+    /** 持有某角色的未删除用户数。删除角色前用来拒绝"删掉仍在用的角色"。 */
+    @Select("SELECT COUNT(*) FROM sys_user_role ur "
+            + "JOIN sys_user u ON u.id = ur.user_id "
+            + "WHERE ur.role_id = #{roleId} AND u.deleted = 0")
+    long countUsersByRoleId(@Param("roleId") Long roleId);
+
     @Delete("DELETE FROM sys_user_role WHERE user_id = #{userId}")
     int deleteUserRoles(@Param("userId") Long userId);
 

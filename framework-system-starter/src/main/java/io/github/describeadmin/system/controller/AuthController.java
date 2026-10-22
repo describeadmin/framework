@@ -16,6 +16,7 @@ import io.github.describeadmin.system.core.RequestClientInfo;
 import io.github.describeadmin.security.autoconfigure.FrameworkSecurityProperties;
 import io.github.describeadmin.security.core.AuthProviderRegistry;
 import io.github.describeadmin.security.core.CaptchaGuard;
+import io.github.describeadmin.security.core.CaptchaIssueThrottle;
 import io.github.describeadmin.security.core.TokenAuthenticationFilter;
 import io.github.describeadmin.system.entity.SysMenu;
 import io.github.describeadmin.system.entity.SysUser;
@@ -56,6 +57,7 @@ public class AuthController {
     private final SysUserService userService;
     private final CaptchaProvider captchaProvider;
     private final ObjectProvider<CaptchaGuard> captchaGuard;
+    private final ObjectProvider<CaptchaIssueThrottle> captchaIssueThrottle;
     private final SysUserAvatarService avatarService;
 
     public AuthController(AuthProviderRegistry registry,
@@ -65,6 +67,7 @@ public class AuthController {
                           SysUserService userService,
                           CaptchaProvider captchaProvider,
                           ObjectProvider<CaptchaGuard> captchaGuard,
+                          ObjectProvider<CaptchaIssueThrottle> captchaIssueThrottle,
                           SysUserAvatarService avatarService) {
         this.registry = registry;
         this.menuService = menuService;
@@ -73,6 +76,7 @@ public class AuthController {
         this.userService = userService;
         this.captchaProvider = captchaProvider;
         this.captchaGuard = captchaGuard;
+        this.captchaIssueThrottle = captchaIssueThrottle;
         this.avatarService = avatarService;
     }
 
@@ -96,7 +100,12 @@ public class AuthController {
      * （{@code describeadmin.security.captcha.*}）决定，本端点本身始终可用。
      */
     @GetMapping("/captcha")
-    public Result<CaptchaChallenge> captcha() {
+    public Result<CaptchaChallenge> captcha(HttpServletRequest request) {
+        CaptchaIssueThrottle throttle = captchaIssueThrottle.getIfAvailable();
+        if (throttle != null) {
+            // 同登录风控：只认直连地址，不信任 X-Forwarded-For
+            throttle.acquire(request.getRemoteAddr());
+        }
         return Result.ok(captchaProvider.generate());
     }
 

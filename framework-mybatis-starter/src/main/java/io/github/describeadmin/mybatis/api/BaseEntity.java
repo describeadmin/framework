@@ -1,6 +1,7 @@
 package io.github.describeadmin.mybatis.api;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
@@ -35,10 +36,17 @@ public abstract class BaseEntity implements Serializable {
     @TableId
     private Long id;
 
-    @TableField(fill = FieldFill.INSERT)
+    /**
+     * 创建人与创建时间只在插入时写，更新一律不碰（{@code updateStrategy = NEVER}）。
+     *
+     * <p>默认的 {@code NOT_NULL} 策略下，通用编辑端点把请求体整个落库，请求体里带一个
+     * {@code createBy} 就能改写创建人——审计链失真，{@code SELF} 档数据权限又是按
+     * {@code create_by} 过滤的，等于能把记录"转移"给任何人。
+     */
+    @TableField(fill = FieldFill.INSERT, updateStrategy = FieldStrategy.NEVER)
     private Long createBy;
 
-    @TableField(fill = FieldFill.INSERT)
+    @TableField(fill = FieldFill.INSERT, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime createTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

@@ -106,9 +106,25 @@
   失败 10 次、或全站 5 分钟内失败 100 次也会要求验证码。按"失败几次才出验证码"写断言的
   自动化脚本可能提前收到 `40103`；同一出口 IP 下跑大量失败登录的测试，需调高或关闭
   `describeadmin.security.captcha.{ip,global}`。
+- **授权上限**（`GrantCeiling`）：分配角色、建号带角色、给角色分配菜单时，本次**增加与移除**的角色 / 菜单
+  都必须在操作者自己当前持有的菜单之内（实时查库），否则返回 `40300`。此前持有
+  `system:user:assign-role` 的"用户管理员"能给任何人（包括自己、或一个新建的号）挂上 ADMIN，
+  重新登录即为超管。**后果**：ADMIN 自己缺了某个菜单的授权（例如业务方的菜单 changeset 没给 ADMIN 授权），
+  就无法再把这个菜单、或含它的角色转授给别人——先给 ADMIN 补授权（codegen 的 `grantToAdmin` 已经这样做）。
+  没有登录用户的系统上下文（种子数据、后台任务）不受限。
+- **删除时校验引用**：有下级部门或下属用户（含停用）的部门、有子菜单的菜单、仍分配给用户的角色，删除一律返回
+  `40000`。此前直接删除，留下指向不存在部门的用户、被提升为根的孤儿菜单。删除角色成功后同时清掉
+  `sys_role_menu` / `sys_role_dept` 关联。直接调删除接口的脚本需先清理引用。
+- **不能删除当前登录的账号**（`40000`）。
+- **`GET /api/auth/captcha` 按 IP 限流**：同一 IP 1 分钟内超过 60 次返回 `40000`（见 New Features）。
+  同一出口 IP 下大量取验证码的自动化测试需调高或关闭 `describeadmin.security.captcha.issue`。
 
 ### New Features
 
+- **验证码签发限流**（`CaptchaIssueThrottle`）：`describeadmin.security.captcha.issue.{enabled,threshold,window}`，
+  默认开、同一 IP 1 分钟 60 次。验证码端点免登录、每次领题都写一条缓存，不设限时可以无成本刷满默认的
+  内存 `CacheProvider`（与登录锁定计数共用、满了要淘汰）。IP 只取 `request.getRemoteAddr()`。
+  与 `captcha.enabled` 无关——端点始终可用，就始终限流。
 - **PoW 验证码**（`PowCaptchaProvider`，核心默认实现，纯 JDK 零依赖）。服务端出题
   `hex(SHA-256(salt + n))`，浏览器从 0 起逐个尝试找出 n，用户不需要输入任何东西。
   难度 `describeadmin.security.captcha.pow.max-number`（默认 100000，桌面 Chrome 平均约 0.1 秒、
@@ -194,6 +210,41 @@
 
 ### Bug Fixes
 
+以下前 6 条来自 1.0.0 发布前审计（工作区根 `审计报告-1.0.0-发布前.md`），回归测试见 `framework-it` 的 `SecurityAuditFixesIT`。
+
+- **分配角色 / 查用户角色不校验数据权限**：`PUT|GET /api/system/user/{id}/roles` 对数据权限范围外的用户
+  照常生效，能跨部门改写任何人的角色。现在与重置密码、换头像同一口径，目标不可见即 `40400`。
+  （纵向提权见 Breaking Changes 的「授权上限」。）
+- **删除用户不吊销令牌**：被删账号已登录的会话在令牌过期前（默认 8 小时）照常可用，refresh token
+  还能继续续期；`sys_user_role` 关联也留着。现在删除即吊销全部令牌并清掉角色关联，与禁用、重置密码一致。
+- **菜单上级可以设成自己或自己的子孙**：成环后整棵子树从菜单管理、授权树、侧边栏同时消失，接口照常 200，
+  界面上无法修复。现在保存 / 编辑时校验上级存在且不成环，否则 `40000`。
+- **审计字段可被请求体伪造**：通用编辑端点带 `createBy` 就能改写创建人（`SELF` 档数据权限按它过滤，
+  等于把记录"转移"给任何人）；带 `updateBy` 能伪造最后修改人；通用新增端点能指定创建人、直接建一条
+  `deleted = 1` 的记录。现在 `createBy` / `createTime` 更新时一律不写（`updateStrategy = NEVER`），
+  更新填充改为覆盖而不是"为空才填"，`BaseController.create` 清空全部审计与控制字段。`version` 仍可由请求体带上——它是乐观锁。
+- **`X-Trace-Id` 原样写进日志与响应头**：只接受 `[A-Za-z0-9_-]{1,64}`，否则换一个新生成的。
+- **依赖安全补丁**：`jackson-bom` 2.21.4 → 2.21.7（jackson-databind / jackson-core 多条 DoS 类 advisory）、
+  `commons-lang3` 3.17.0 → 3.18.0（CVE-2025-48924）。框架父 POM 与 archetype 生成的业务 pom 都已覆盖；
+  **既有业务工程**继承 `spring-boot-starter-parent`，framework-bom 里的同名条目对它们无效，需在自己的
+  `pom.xml` 的 `<properties>` 里加 `<jackson-bom.version>2.21.7</jackson-bom.version>` 与
+  `<commons-lang3.version>3.18.0</commons-lang3.version>`。
+- **前端（`frontend` 仓）**：
+  - `apps/admin/index.html` 删除上游 vben 遗留的百度统计脚本——生产构建必然触发，管理后台每次打开都从
+    `hm.baidu.com` 加载并同源执行第三方脚本。create-app 模板没有这段，业务工程不受影响。
+  - 运行时依赖升级：`axios` 1.16 → 1.20、`qs` 6.15 → 6.16、`@tiptap/*` 3.23 → 3.32（连带 `prosemirror-view` 1.42.6）、
+    `follow-redirects` → 1.16.1（`pnpm-workspace.yaml` 的 overrides 钉下限）、`vue` → 3.5.44（消除 `@vue/server-renderer`
+    告警，本项目不用 SSR）。`pnpm audit --prod` 剩下的全部是构建 / 测试 / lint 工具链，不进产物。
+  - Vue 3.5.4x 起 `defineModel` 按 `default` 推断字面量类型，`collapsible` / `expandable-arrow` /
+    `collapsible-params` / 偏好设置 `sidebar` 四处在新版本下类型检查失败（业务工程按 `^3.5.34` 装到新版 Vue 也会遇到）；
+    已补显式泛型，对象 / 数组默认值改为工厂函数（原写法所有实例共享同一个数组，`sidebar` 还会往里 `push`）。
+  - 路由守卫对 `?redirect=` 做 `decodeURIComponent`，畸形的 `%` 会抛 `URIError` 让整次导航失败、白屏；
+    改为解不开就原样交给 `router.resolve`。`apps/admin` 与 create-app 模板同改。
+  - `scripts/deploy/nginx.conf` 去掉 `Access-Control-Allow-Origin: *`，加 `X-Frame-Options: DENY`、
+    `Content-Security-Policy: frame-ancestors 'none'`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`；
+    HSTS 默认不开（内网 http 部署会被锁死），注释里写了开启条件。
+  - `TiptapPreview` 与 `.env` 的 `VITE_APP_STORE_SECURE_KEY` 补注释：前者 `v-html` 直出只能用于可信内容，
+    后者打进产物、是混淆不是防护。
 - **编辑一次用户落两条操作日志**（`system:user 编辑` + `更新用户`，0.2.0 起）。
   `SysUserController.update` 覆写了 `BaseController.update` 又标了 `@OperLog`，
   `OperLogAspect` 的通用切点与注解切点同时命中。两条切点的互斥此前只靠"覆写方法别标注解"

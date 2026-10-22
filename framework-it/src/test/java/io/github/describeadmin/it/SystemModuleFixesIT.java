@@ -85,7 +85,10 @@ class SystemModuleFixesIT extends AbstractMySqlIntegrationTest {
             assertThat(relationMapper.selectMenuIdsByUserId(userId)).contains(menu.getId());
             assertThat(relationMapper.selectRoleCodesByUserId(userId)).contains("REGRESS_DELETED");
 
-            roleService.removeById(role.getId());
+            // 1.0.0 起 SysRoleService.removeById 拒绝删除仍分配给用户的角色，这里直接走 Mapper 的逻辑删除：
+            // 读取侧的 r.deleted 过滤仍是必需的兜底——1.0.0 之前删掉的角色、直接改库删掉的角色，
+            // 关联行都还在
+            roleService.getBaseMapper().deleteById(role.getId());
 
             // 删除角色是 sys_role 的逻辑删除，sys_user_role 的关联行仍在（授权是重建语义）。
             // 关联查询若只过滤 sys_menu.deleted，被删角色会继续下发权限点与菜单路由。

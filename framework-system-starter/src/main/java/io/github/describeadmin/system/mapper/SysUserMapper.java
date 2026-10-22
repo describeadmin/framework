@@ -120,4 +120,14 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             + "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>"
             + "</script>")
     List<SysUser> selectBriefByIdsIgnoreDataScope(@Param("ids") Collection<Long> ids);
+
+    /**
+     * 某部门下的未删除用户数（含停用），忽略数据权限过滤。
+     *
+     * <p>删除部门前判断"部门下还有没有人"用。必须忽略数据权限：操作者看不见的用户也是这个部门的人，
+     * 按可见范围计数会漏判，删掉部门后这些用户的 {@code dept_id} 就指向一个不存在的部门。
+     */
+    @InterceptorIgnore(dataPermission = "true")
+    @Select("SELECT COUNT(*) FROM sys_user WHERE dept_id = #{deptId} AND deleted = 0")
+    long countByDeptIdIgnoreDataScope(@Param("deptId") Long deptId);
 }

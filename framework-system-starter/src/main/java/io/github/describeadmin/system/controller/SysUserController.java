@@ -143,9 +143,22 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         return Result.ok();
     }
 
+    /**
+     * 删除用户。覆写通用端点：除了逻辑删除，还要吊销该用户的全部令牌、清掉角色关联，
+     * 见 {@link SysUserService#deleteUser(Long)}。
+     */
+    @Override
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        requirePermission("remove");
+        service.deleteUser(id);
+        return Result.ok();
+    }
+
     @PreAuthorize("hasAuthority('system:user:list')")
     @GetMapping("/{userId}/roles")
     public Result<List<Long>> roles(@PathVariable Long userId) {
+        service.requireVisible(userId);
         return Result.ok(service.roleIdsOf(userId));
     }
 
@@ -153,6 +166,7 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
      * 重新授予角色。整体覆盖而非增量修改。
      *
      * <p>权限点是专用的 {@code system:user:assign-role}，理由同 {@link #resetPassword}。
+     * 目标用户须在数据权限范围内，增删的角色受授权上限约束（{@code GrantCeiling}）。
      */
     @OperLog(module = "system:user", description = "分配角色")
     @PreAuthorize("hasAuthority('system:user:assign-role')")

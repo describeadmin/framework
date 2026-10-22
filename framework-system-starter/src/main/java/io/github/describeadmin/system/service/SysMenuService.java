@@ -2,7 +2,9 @@ package io.github.describeadmin.system.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import io.github.describeadmin.common.api.BizException;
 import io.github.describeadmin.common.api.OptionItem;
+import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.common.api.TreeBuilder;
 import io.github.describeadmin.system.core.MenuAncestorClosure;
@@ -11,10 +13,12 @@ import io.github.describeadmin.system.mapper.SysMenuMapper;
 import io.github.describeadmin.system.mapper.SysRelationMapper;
 import org.springframework.stereotype.Service;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,6 +51,7 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     @Override
     public boolean save(SysMenu entity) {
         normalizeBlankToNull(entity);
+        assertValidParent(null, entity.getParentId());
         return super.save(entity);
     }
 
@@ -76,6 +81,7 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
     @Override
     public boolean updateById(SysMenu entity) {
         normalizeBlankToNull(entity);
+        assertValidParent(entity.getId(), entity.getParentId());
 
         UpdateWrapper<SysMenu> wrapper = new UpdateWrapper<>();
         // update(entity, wrapper) 的 WHERE 取自 wrapper，不会自动用实体 id
@@ -108,6 +114,54 @@ public class SysMenuService extends BaseService<SysMenuMapper, SysMenu> {
         if (value == null) {
             wrapper.setSql(column + " = NULL");
         }
+    }
+
+    /**
+     * 上级菜单必须存在，且不能是自己或自己的子孙。
+     *
+     * <p>成环的后果很隐蔽：{@code TreeBuilder} 把成环的节点挂在环里的某个节点下面，而环上没有一个节点是根，
+     * 于是<b>整棵子树从菜单管理、授权树、侧边栏同时消失</b>，接口照常返回 200。界面上无从修复，
+     * 只能改库。{@code parentId} 为 {@code null}（编辑时不改上级）或 {@code 0}（顶级）时不检查。
+     *
+     * @param selfId 被编辑的菜单 id；新增时为 {@code null}
+     */
+    private void assertValidParent(Long selfId, Long parentId) {
+        if (parentId == null || parentId == 0L) {
+            return;
+        }
+        if (parentId.equals(selfId)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "不能把菜单移动到自己或自己的下级菜单下");
+        }
+        Map<Long, Long> parentById = new HashMap<>();
+        for (SysMenu menu : list(new QueryWrapper<SysMenu>().select("id", "parent_id"))) {
+            parentById.put(menu.getId(), menu.getParentId());
+        }
+        if (!parentById.containsKey(parentId)) {
+            throw new BizException(ResultCode.BAD_REQUEST, "上级菜单不存在: " + parentId);
+        }
+        if (selfId == null) {
+            return;
+        }
+        // 从新上级往根走，路上遇到自己就是成环。visited 防既有脏数据里的环导致死循环
+        Set<Long> visited = new HashSet<>();
+        for (Long cursor = parentId; cursor != null && cursor != 0L && visited.add(cursor);
+             cursor = parentById.get(cursor)) {
+            if (cursor.equals(selfId)) {
+                throw new BizException(ResultCode.BAD_REQUEST, "不能把菜单移动到自己或自己的下级菜单下");
+            }
+        }
+    }
+
+    /**
+     * 删除菜单。有子菜单时拒绝：子节点会成为孤儿，被 {@code TreeBuilder} 提升为根，
+     * 侧边栏层级与授权树都跟着乱掉。
+     */
+    @Override
+    public boolean removeById(Serializable id) {
+        if (count(new QueryWrapper<SysMenu>().eq("parent_id", id)) > 0) {
+            throw new BizException(ResultCode.BAD_REQUEST, "存在子菜单，不能删除");
+        }
+        return super.removeById(id);
     }
 
     private static void normalizeBlankToNull(SysMenu menu) {

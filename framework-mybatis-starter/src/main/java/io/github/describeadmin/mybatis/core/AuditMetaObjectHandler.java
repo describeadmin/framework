@@ -1,6 +1,7 @@
 package io.github.describeadmin.mybatis.core;
 
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
+import com.baomidou.mybatisplus.core.metadata.TableInfo;
 import io.github.describeadmin.common.api.CurrentUserProvider;
 import org.apache.ibatis.reflection.MetaObject;
 
@@ -55,12 +56,28 @@ public class AuditMetaObjectHandler implements MetaObjectHandler {
         }
     }
 
+    /**
+     * 更新时<b>覆盖</b>而不是"为空才填"。
+     *
+     * <p>{@code strictUpdateFill} 只在字段为 {@code null} 时写入，而通用编辑端点把请求体整个落库——
+     * 请求体里带一个 {@code updateBy} 就能把"最后修改人"伪造成任何人。更新人与更新时间只能由服务端决定。
+     */
     @Override
     public void updateFill(MetaObject metaObject) {
-        strictUpdateFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now(clock));
+        overwriteUpdateFill(metaObject, "updateTime", LocalDateTime.now(clock));
         Long userId = currentUserProvider.currentUserId();
         if (userId != null) {
-            strictUpdateFill(metaObject, "updateBy", Long.class, userId);
+            overwriteUpdateFill(metaObject, "updateBy", userId);
+        }
+    }
+
+    /** 与 {@code strictUpdateFill} 同一个口径（只动标了 UPDATE 填充的字段），区别只在于覆盖已有值。 */
+    private void overwriteUpdateFill(MetaObject metaObject, String field, Object value) {
+        TableInfo tableInfo = findTableInfo(metaObject);
+        boolean filled = tableInfo != null && tableInfo.getFieldList().stream()
+                .anyMatch(f -> f.isWithUpdateFill() && f.getProperty().equals(field));
+        if (filled) {
+            setFieldValByName(field, value, metaObject);
         }
     }
 }

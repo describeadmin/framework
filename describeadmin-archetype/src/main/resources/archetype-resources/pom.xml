@@ -48,6 +48,16 @@
       目标库是 MySQL 8.0+ 或国产化数据库时，改这里的版本或换成对应驱动坐标即可。
     -->
     <mysql.version>8.2.0</mysql.version>
+
+    <!--
+      安全补丁：覆盖 spring-boot-starter-parent 管理的两个版本，理由同上（继承优先于 import，
+      framework-bom 里同样的条目对本工程无效）。
+        jackson 2.21.4 → 2.21.7：jackson-databind / jackson-core 多条 DoS 类 advisory
+        commons-lang3 3.17.0 → 3.18.0：CVE-2025-48924
+      以后升级 spring-boot-starter-parent 时，Boot 自带的版本不低于这两个就可以删掉。
+    -->
+    <jackson-bom.version>2.21.7</jackson-bom.version>
+    <commons-lang3.version>3.18.0</commons-lang3.version>
   </properties>
 
   <dependencyManagement>

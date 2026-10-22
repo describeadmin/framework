@@ -8,9 +8,11 @@ import io.github.describeadmin.mybatis.api.BaseService;
 import io.github.describeadmin.common.api.TreeBuilder;
 import io.github.describeadmin.system.entity.SysDept;
 import io.github.describeadmin.system.mapper.SysDeptMapper;
+import io.github.describeadmin.system.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,6 +26,28 @@ import java.util.Objects;
  */
 @Service
 public class SysDeptService extends BaseService<SysDeptMapper, SysDept> {
+
+    private final SysUserMapper userMapper;
+
+    public SysDeptService(SysUserMapper userMapper) {
+        this.userMapper = userMapper;
+    }
+
+    /**
+     * 删除部门。有下级部门或下属用户（含停用）时拒绝：下级部门会成为孤儿被提升为根，
+     * 用户的 {@code dept_id} 会指向一个不存在的部门，按部门的数据权限也随之失真。
+     */
+    @Override
+    public boolean removeById(Serializable id) {
+        Long deptId = Long.valueOf(String.valueOf(id));
+        if (count(new QueryWrapper<SysDept>().eq("parent_id", deptId)) > 0) {
+            throw new BizException(ResultCode.BAD_REQUEST, "存在下级部门，不能删除");
+        }
+        if (userMapper.countByDeptIdIgnoreDataScope(deptId) > 0) {
+            throw new BizException(ResultCode.BAD_REQUEST, "部门下还有用户，不能删除");
+        }
+        return super.removeById(id);
+    }
 
     /** 部门树。 */
     public List<SysDept> tree() {

@@ -28,6 +28,9 @@ describeadmin:
         threshold: 1000000
       global:
         threshold: 1000000
+      # 验证码签发限流同理（按 IP 计数），行为由 CaptchaIssueThrottleTest 覆盖
+      issue:
+        threshold: 1000000
   system:
     # 库里没有用户时创建管理员 admin，随机强口令写到 target 下的文件
     # （具体路径见 AbstractMySqlIntegrationTest.DEV_SEED_PASSWORD_FILE）

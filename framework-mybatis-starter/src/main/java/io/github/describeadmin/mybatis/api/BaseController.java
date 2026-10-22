@@ -258,6 +258,14 @@ public abstract class BaseController<S extends BaseService<M, T>,
         requirePermission("add");
         // 主键由数据库自增或全局 ID 策略生成，忽略客户端传入值，防止越权指定主键
         entity.setId(null);
+        // 审计与控制字段同理由服务端决定：插入填充只在字段为 null 时才写，
+        // 不清掉的话请求体能指定创建人、直接建一条"已删除"的记录或自定版本号
+        entity.setCreateBy(null);
+        entity.setCreateTime(null);
+        entity.setUpdateBy(null);
+        entity.setUpdateTime(null);
+        entity.setDeleted(null);
+        entity.setVersion(null);
         getService().save(entity);
         return Result.ok(entity);
     }

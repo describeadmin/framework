@@ -284,6 +284,14 @@ public class FrameworkSecurityProperties {
          */
         private final RiskDimension global = new RiskDimension(100, Duration.ofMinutes(5));
 
+        /**
+         * 签发频率：同一 IP 在时间窗内最多领取多少道验证码，超过后 {@code GET /api/auth/captcha} 返回错误。
+         *
+         * <p>与 {@link #enabled} 无关——验证码端点本身始终可用，限流保护的是这个免登录端点，
+         * 不是"是否要求验证码"。IP 口径同 {@link #ip}。
+         */
+        private final RiskDimension issue = new RiskDimension(60, Duration.ofMinutes(1));
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -310,6 +318,10 @@ public class FrameworkSecurityProperties {
 
         public RiskDimension getGlobal() {
             return global;
+        }
+
+        public RiskDimension getIssue() {
+            return issue;
         }
 
         public int getTriggerThreshold() {
