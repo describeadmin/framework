@@ -39,7 +39,8 @@ describeadmin:
     # 也就不存在「开发期放开的 CORS 被带上生产」这类事故
   system:
     dev-seed:
-      # 只在本地开发打开：库里没有用户时创建管理员 admin，口令随机生成并写到项目根 .passwd。
+      # 只在本地开发打开：库里没有用户时创建管理员 admin。项目根 .passwd 已存在就复用其中的口令
+      # （重建本地库后口令不变），否则随机生成并写进去。
       # ⚠️ application-dev.yml / application-prod.yml 里【不要】有这一段。
       enabled: true
 

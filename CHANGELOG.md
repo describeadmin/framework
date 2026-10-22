@@ -186,6 +186,11 @@
   `framework-cache-redis-starter` 的 `RedisTokenStore` 已提供（插件要求框架 1.0.0）。
   前端顺带把表格 `row-key` 从不唯一的 `userId` 换成 `sessionId`；对自己所属账号点
   「强制下线」时确认框会提示当前登录也会失效。
+- **dev-seed 复用已有的口令文件**。库里没有用户、而 `describeadmin.system.dev-seed.password-file`
+  （默认 `.passwd`）已存在且非空时，直接用其中的口令建管理员，不再随机生成并覆盖它——
+  重建本地库后，前端 e2e、脚本里保存的口令仍然有效。文件内容首尾空白会去掉；口令不满足
+  `PasswordPolicy` 时拒绝启动（不悄悄改为随机生成）。库里已有用户时行为不变：整体跳过、不读写文件。
+  顺带修正：写口令文件失败时启动日志不再声称「明文口令已写入」。
 
 ### Bug Fixes
 

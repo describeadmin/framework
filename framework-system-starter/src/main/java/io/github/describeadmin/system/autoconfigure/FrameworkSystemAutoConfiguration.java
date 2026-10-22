@@ -110,8 +110,8 @@ public class FrameworkSystemAutoConfiguration {
 
     /**
      * 开发种子管理员。默认不装配——只有 {@code application-local.yml} 显式打开
-     * {@code describeadmin.system.dev-seed.enabled=true} 时才创建随机口令的管理员账号，
-     * 并把明文写到项目根 {@code .passwd}。生产 profile 永远不会有这个 Bean。
+     * {@code describeadmin.system.dev-seed.enabled=true} 时才创建管理员账号：项目根 {@code .passwd}
+     * 已存在则复用其中的口令，否则随机生成并写入该文件。生产 profile 永远不会有这个 Bean。
      */
     @Bean
     @ConditionalOnMissingBean

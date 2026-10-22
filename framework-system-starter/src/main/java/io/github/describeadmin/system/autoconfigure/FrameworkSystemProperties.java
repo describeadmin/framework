@@ -87,16 +87,17 @@ public class FrameworkSystemProperties {
      * 开发种子管理员，前缀 {@code describeadmin.system.dev-seed}。
      *
      * <p><b>默认关闭，只应在 {@code application-local.yml} 里打开</b>——生产 profile 永不装配。
-     * 开启后 {@code DevAdminSeeder} 在库里没有任何用户时创建一个管理员账号，口令<b>随机生成</b>
-     * （符合 {@code PasswordPolicy}），BCrypt 入库，明文写到 {@link #passwordFile} 并打印到启动日志。
-     * 因此仓库里不再有任何固定默认口令。幂等：库里已有用户则整体跳过。
+     * 开启后 {@code DevAdminSeeder} 在库里没有任何用户时创建一个管理员账号，BCrypt 入库。
+     * {@link #passwordFile} 已存在且非空时复用其中的口令，否则<b>随机生成</b>（符合 {@code PasswordPolicy}），
+     * 明文写到 {@link #passwordFile} 并打印到启动日志。因此仓库里不再有任何固定默认口令。
+     * 幂等：库里已有用户则整体跳过。
      */
     public static class DevSeed {
 
         /** 是否启用开发种子管理员。默认 {@code false}。 */
         private boolean enabled = false;
 
-        /** 明文口令写到哪个文件，相对启动目录（{@code ${user.dir}}）解析。 */
+        /** 明文口令文件（已存在则复用其中的口令，否则写入随机口令），相对启动目录（{@code ${user.dir}}）解析。 */
         private String passwordFile = ".passwd";
 
         /** 种子管理员的用户名。 */
