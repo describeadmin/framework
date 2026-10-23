@@ -35,9 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>{@link #acceptsSpaceSeparatedDateTimeInBody()} 覆盖的是一个<b>本批修复前真实存在的
  * bug</b>：codegen 生成的日期时间选择器发的是 {@code yyyy-MM-dd HH:mm:ss}，
  * 而 Spring Boot 默认按 ISO-8601 解析，任何带 {@code datetime} 字段的模块，
- * 新增/编辑表单一提交就失败。实测复现（把 {@code describeadmin.web.json.enabled}
- * 关掉再发同样的请求）返回的是 <b>500</b>——{@code GlobalExceptionHandler} 没有
- * 单独处理 {@code HttpMessageNotReadableException}，解析失败落到 Throwable 兜底。
+ * 新增/编辑表单一提交就失败。解析失败本身怎么报错见 {@link GlobalExceptionHandlerHttpTest}。
  */
 @SpringBootTest(classes = JsonHttpRoundTripTest.TestApp.class)
 @AutoConfigureMockMvc

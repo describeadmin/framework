@@ -43,11 +43,8 @@ import java.time.temporal.ChronoField;
  * 但 {@code @RequestBody} 那条路没有——只要业务表有 {@code datetime} 字段，
  * 新增/编辑表单提交就是坏的。
  *
- * <p>实测（关掉本模块复现）该故障返回的是 <b>500 而不是 400</b>：
- * {@code GlobalExceptionHandler} 没有单独处理 {@code HttpMessageNotReadableException}，
- * 请求体解析失败会落到 {@code Throwable} 兜底分支。也就是说"日期格式填错"这种
- * 纯输入问题会报成服务器内部错误，把排查方向带偏——这一点独立于本模块，
- * 已登记在 VERSION_BASELINE.md。
+ * <p>请求体解析失败（包括日期格式不合法）由 {@code GlobalExceptionHandler} 报成「请求参数错误」，
+ * 不是服务器内部错误。
  *
  * <p>反序列化保留对 ISO 的兼容，是为了不打断已经在按 ISO 发数据的调用方。
  */
