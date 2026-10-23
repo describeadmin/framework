@@ -43,7 +43,7 @@
       <defaultValue>8090</defaultValue>
     </requiredProperty>
 
-    <!-- 本地 MySQL 端口。3307 是为了不和机器上已有的 3306 撞车（QUICKSTART §2） -->
+    <!-- 本地 MySQL 端口。3307 是为了不和机器上已有的 3306 撞车 -->
     <requiredProperty key="dbPort">
       <defaultValue>3307</defaultValue>
     </requiredProperty>

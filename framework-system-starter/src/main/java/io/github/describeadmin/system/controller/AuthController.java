@@ -84,7 +84,7 @@ public class AuthController {
      * 当前项目启用了哪些登录方式。
      *
      * <p>前端登录页调用本接口动态渲染，<b>不要把登录按钮硬编码在页面里</b>——
-     * 这是插件化在前端侧成立的关键（develop_plan.md 3.2）。
+     * 这是插件化在前端侧成立的关键。
      * 引入浙政钉插件后这里自动多出一项，前后端都不用改代码。
      */
     @GetMapping("/providers")
@@ -124,7 +124,7 @@ public class AuthController {
         String type = String.valueOf(body.getOrDefault("type", "password"));
         // 风控用直连地址，不用 RequestClientInfo.clientIp()：后者优先信任 X-Forwarded-For，
         // 攻击者每次请求换一个伪造值就能绕过 IP 维度。反向代理之后由
-        // server.forward-headers-strategy=native 让容器从受信代理还原真实地址
+        // server.forward-headers-strategy=native 让容器按 X-Forwarded-For 还原地址（前提是应用端口只有代理能访问）
         String riskIp = request.getRemoteAddr();
         CaptchaGuard guard = captchaGuard.getIfAvailable();
         if (guard != null) {

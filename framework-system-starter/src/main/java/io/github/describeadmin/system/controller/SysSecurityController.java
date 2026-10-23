@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 登录锁定的管理侧可观测性（docs/LOGIN_MODULE_AUDIT.md D 项）。
+ * 登录锁定的管理侧可观测性。
  *
  * <p>数据直接来自 {@link LoginAttemptGuard}，没有对应的数据库表——理由与
  * {@link SysOnlineController} 一致：锁定状态本来就存在 {@code CacheProvider} 里，
@@ -28,7 +28,7 @@ import java.util.List;
  * system 先于 security 被装配，此时 {@link LoginAttemptGuard} 这个 Bean 还不存在。
  * 若给本类或本类的方法加 {@code @ConditionalOnBean(LoginAttemptGuard.class)}，
  * 条件求值会因为"看不到还没注册的 Bean"而失败，导致本控制器被静默跳过——
- * 引了却没生效，启动毫无异常，与 docs/registry.md 准入规范第 3 条描述的是同一类陷阱，
+ * 引了却没生效，启动毫无异常，与 docs/site/dev/plugin-dev.md 第 3 条描述的是同一类陷阱，
  * 只是这次发生在核心内部两个 starter 之间。用 {@code ObjectProvider} 规避：
  * 控制器本身始终注册，只在真正处理请求时才判断 Guard 是否存在——
  * {@code describeadmin.security.lockout.enabled=false} 时接口返回空列表/空操作，

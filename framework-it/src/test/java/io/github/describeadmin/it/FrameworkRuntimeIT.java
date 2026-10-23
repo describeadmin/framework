@@ -285,7 +285,7 @@ class FrameworkRuntimeIT extends AbstractMySqlIntegrationTest {
     // ---------------------------------------------------------------- 改密码 / 禁用账号：令牌吊销
 
     @Test
-    @DisplayName("管理员重置密码后，该用户已签发的令牌立即失效（docs/LOGIN_MODULE_AUDIT.md B 项）")
+    @DisplayName("管理员重置密码后，该用户已签发的令牌立即失效")
     void resetPasswordRevokesExistingTokens() {
         SysUser u = new SysUser();
         u.setUsername("revoke-on-reset-pwd");

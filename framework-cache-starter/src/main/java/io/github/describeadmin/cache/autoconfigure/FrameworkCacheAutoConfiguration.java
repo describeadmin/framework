@@ -27,7 +27,7 @@ import org.springframework.context.annotation.Bean;
  * <p>插件侧必须声明 {@code @AutoConfiguration(before = FrameworkCacheAutoConfiguration.class)}
  * 或让自己的 Bean 定义先被评估——{@code @ConditionalOnMissingBean} 只看当前已注册的
  * Bean 定义，顺序不对会出现"插件引了却没生效"，且没有任何报错
- * （VERSION_BASELINE.md 发现 ⑦ 记录过同类问题）。
+ * （docs/site/dev/pitfalls.md ⑦ 记录过同类问题）。
  *
  * <p>锁配置（{@code describeadmin.lock.*}）的非法取值在构造函数里拒绝启动——
  * 配置错误应该在部署当天暴露，而不是某个请求上表现异常。

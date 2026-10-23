@@ -10,7 +10,7 @@
     注意：本项目【不继承】spring-boot-starter-parent。
     原因是本项目产出的是【库】而非【应用】，继承 spring-boot-starter-parent 会带来
     repackage 等面向应用的插件配置。改为在 framework-bom 中 import spring-boot-dependencies。
-    详见 develop_plan.md 3.1。
+    详见 docs/site/dev/architecture.md「分层模型」。
   -->
 
   <groupId>io.github.describeadmin</groupId>
@@ -58,7 +58,7 @@
 
     <!--
       这里【只有核心模块】。可选插件（framework-cache-redis-starter 等）一律独立成仓，
-      清单见 docs 仓的 registry.md 与 repos.yml。
+      清单见 docs 仓的 site/reference/plugins.md 与 repos.yml。
 
       插件不在本 reactor 里，是为了斩断两条耦合：
         - 版本线：框架发 0.3.0 时，一行没改的插件不必跟着发；插件修 bug 也不必等框架的发布窗口
@@ -69,7 +69,7 @@
 
     <!--
       业务方工程脚手架。放在最后：它不参与框架的依赖图，只是与框架同版本发布的一个模板产物。
-      版本必须与框架一致 —— 它生成的 POM 里写的就是框架版本（develop_plan.md 9.2.2）。
+      版本必须与框架一致 —— 它生成的 POM 里写的就是框架版本。
     -->
     <module>describeadmin-archetype</module>
   </modules>
@@ -79,23 +79,23 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
     <!--
-      Java 版本策略（develop_plan.md 2.2.2）：
+      Java 版本策略（CLAUDE.md 1）：
         构建 JDK 只要求 17 或更高，用哪个由构建者自己定（enforcer 的 requireJavaVersion 兜底）
         编译目标 release=17，使业务方 Java 17+ 即可使用
       不要把 release 改成 21 —— 那会把仍在 17 上的使用方挡在门外。
 
       不再用 maven-toolchains-plugin 钉死构建 JDK：release=17 本身已保证产物在 Java 17 上可运行，
       再钉一个具体版本只会让没配 ~/.m2/toolchains.xml 的协作者/AI 以
-      "Cannot find matching toolchain" 直接构建失败，比它要防的坑更劝退（VERSION_BASELINE 第八轮）。
+      "Cannot find matching toolchain" 直接构建失败，比它要防的坑更劝退（docs/site/dev/versions.md）。
     -->
     <maven.compiler.release>17</maven.compiler.release>
 
-    <!-- 上游版本，事实来源见 VERSION_BASELINE.md -->
+    <!-- 上游版本，事实来源见 docs/site/dev/versions.md -->
     <spring-boot.version>3.5.16</spring-boot.version>
     <mybatis-plus.version>3.5.17</mybatis-plus.version>
 
     <!--
-      5.7-safe 默认值（develop_plan.md 2.3.3）。
+      5.7-safe 默认值（CLAUDE.md 3.4）。
       ⚠️ Connector/J 自 8.3.0 起官方不再支持 MySQL 5.7，8.2.0 是最后一个支持的版本。
       不要"顺手升级"。业务方可在自己的 pom 中覆盖。
     -->
@@ -139,7 +139,7 @@
 
         Spring Boot 3.5.16 默认管理 mysql-connector-j:9.7.0，而 Connector/J 自 8.3.0 起
         官方不再支持 MySQL 5.7（"8.0 and later"）。此处压回 8.2.0 —— 最后一个支持 5.7 的版本。
-        见 develop_plan.md 2.3.3 与 VERSION_BASELINE.md 冲突 A。
+        见 CLAUDE.md 3.4 与 docs/site/dev/versions.md。
 
         业务方使用 MySQL 8.0+ 或国产化数据库时，在自己的 pom.xml 中先声明对应版本即可覆盖。
       -->
@@ -255,7 +255,7 @@
       注意这【不】等于框架反对 lombok：codegen 生成的业务代码用 @Getter / @Setter /
       @RequiredArgsConstructor 去掉逐字段样板，那份 lombok 依赖由 archetype 生成的业务
       pom 自带、版本走 spring-boot-dependencies，编译发生在业务方的构建链上、JDK 由业务方
-      掌控。framework-bom 不仲裁 lombok。详见 CLAUDE.md 4.1 与 develop_plan.md 3.3。
+      掌控。framework-bom 不仲裁 lombok。详见 CLAUDE.md 4.10。
     -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -294,7 +294,7 @@
           <!--
             测试 JVM 必须显式指定 UTF-8。默认取平台编码，中文 Windows 上是 GBK，
             断言里的中文会与被测代码里的中文对不上，而失败信息本身也是乱码，
-            排查方向会完全跑偏。见 CLAUDE.md 3.6 与 VERSION_BASELINE.md 发现 ④⑤。
+            排查方向会完全跑偏。见 CLAUDE.md 3.6 与 docs/site/dev/pitfalls.md ④⑤。
             framework-it 与各插件仓的 surefire 也配了同样一行。
           -->
           <argLine>-Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8</argLine>
@@ -322,13 +322,13 @@
                 <!--
                   构建 JDK 只要求 17+。release=17 已保证产物在 Java 17 上可运行，
                   构建者用 17 / 21 / 更高都行；不再用 maven-toolchains-plugin 钉死具体版本
-                  （develop_plan.md 2.2.2，VERSION_BASELINE 第八轮）。
+                  （CLAUDE.md 1，docs/site/dev/versions.md）。
                 -->
                 <requireJavaVersion>
                   <version>[17,)</version>
                 </requireJavaVersion>
                 <!--
-                  框架的任何模块都不得引入 JDBC 驱动（develop_plan.md 2.3.2 / CLAUDE.md 3.4）。
+                  框架的任何模块都不得引入 JDBC 驱动（CLAUDE.md 3.4）。
                   驱动由业务方声明；此处从构建期堵死，防止有人"顺手"加进来。
                 -->
                 <bannedDependencies>
@@ -343,12 +343,12 @@
                   </excludes>
                   <message>
                     框架模块不得依赖任何 JDBC 驱动。驱动由业务方在自己的 pom.xml 中声明。
-                    见 develop_plan.md 2.3.2 与 CLAUDE.md 3.4。
+                    见 CLAUDE.md 3.4。
                   </message>
                 </bannedDependencies>
                 <!--
                   Jackson 3 的坐标是 tools.jackson.*，包名与 2.x 不兼容。
-                  本项目锁定 Jackson 2.x（develop_plan.md 2.2.1）。
+                  本项目锁定 Jackson 2.x（CLAUDE.md 1，docs/site/dev/architecture.md「技术选型」）。
                 -->
                 <bannedDependencies>
                   <searchTransitive>true</searchTransitive>
@@ -367,7 +367,7 @@
           <!--
             单独成一个 execution 而不与上面两条合并：本条只适用于核心。
             插件已独立成仓、不继承本 POM，因此天然不受这条约束 ——
-            但它们仍要自带上面那两条（JDBC 驱动、Jackson 3），见 registry.md 准入规范。
+            但它们仍要自带上面那两条（JDBC 驱动、Jackson 3），见 docs/site/dev/plugin-dev.md。
           -->
           <execution>
             <id>enforce-core-thin</id>
@@ -433,7 +433,7 @@
       都不含它，因此它不会被构建、更不会被 deploy。
         mvn -f framework/pom.xml verify -Pit                     # 默认 mysql:5.7
         mvn -f framework/pom.xml verify -Pit -Dmysql.image=mysql:8.4
-      它替代原独立仓 sample-app 的「双版本 MySQL 运行时门禁」职责（docs/MIGRATION_NOTES.md D3）。
+      它替代原独立仓 sample-app 的「双版本 MySQL 运行时门禁」职责（docs/site/dev/testing.md）。
     -->
     <profile>
       <id>it</id>

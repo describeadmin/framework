@@ -12,7 +12,7 @@
         mvn -f framework/pom.xml verify -Pit -Dmysql.image=mysql:8.4
 
     它替代了原先由独立仓 sample-app 承担的「双版本 MySQL 运行时门禁」职责
-    （见 docs/MIGRATION_NOTES.md D3）：以真实业务方姿态（继承 framework-parent 仅为
+    （见 docs/site/dev/testing.md）：以真实业务方姿态（继承 framework-parent 仅为
     复用构建配置，依赖仍走 starter）驱动一个最小 Spring Boot 应用，用 Testcontainers
     拉起真实 MySQL，验证审计填充 / 分页 / 逻辑删除 / 乐观锁 / 中文往返 / 认证 SPI /
     系统模块 CRUD / 权限与数据权限 / 操作日志 / 在线会话 / 登录锁定 / 口令策略 /

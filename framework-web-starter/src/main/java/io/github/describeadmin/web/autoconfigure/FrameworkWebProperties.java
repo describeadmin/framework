@@ -64,10 +64,16 @@ public class FrameworkWebProperties {
          */
         private boolean longAsString = true;
 
+        /**
+         * {@code LocalDateTime} 的输出格式，{@code Instant} 按服务器默认时区换算后也用它。
+         * 输入不受此限制：{@code T} 与空格分隔、省略秒都能解析。
+         */
         private String dateTimeFormat = "yyyy-MM-dd HH:mm:ss";
 
+        /** {@code LocalDate} 的输出格式。输入固定按 {@code yyyy-MM-dd} 解析。 */
         private String dateFormat = "yyyy-MM-dd";
 
+        /** {@code LocalTime} 的输出格式。输入时秒与小数秒可省略。 */
         private String timeFormat = "HH:mm:ss";
 
         public boolean isEnabled() {

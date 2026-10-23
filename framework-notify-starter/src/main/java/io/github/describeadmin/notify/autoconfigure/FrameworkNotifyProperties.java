@@ -17,6 +17,7 @@ public class FrameworkNotifyProperties {
     /** 框架内置日志通道的开关。关闭后行为与"没有这个通道"完全一致。 */
     public static class Log {
 
+        /** 是否注册内置的日志通道（{@code channel = "log"}，把消息写进应用日志）。 */
         private boolean enabled = true;
 
         public boolean isEnabled() {

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * framework-it 没有写任何一行 RBAC 代码，这些能力全部来自
  * framework-system-starter 的自动配置。
  *
- * <p>这正是 develop_plan.md 目标 #5 的落点：框架修了 RBAC 的问题，
+ * <p>这正是「可持续升级」这个设计目标的落点：框架修了 RBAC 的问题，
  * 业务方升个版本就拿到了；若让每个业务方自己实现，框架永远修不了他们的代码。
  */
 @DisplayName("系统管理（框架提供）")

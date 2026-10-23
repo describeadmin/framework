@@ -207,10 +207,16 @@
   重建本地库后，前端 e2e、脚本里保存的口令仍然有效。文件内容首尾空白会去掉；口令不满足
   `PasswordPolicy` 时拒绝启动（不悄悄改为随机生成）。库里已有用户时行为不变：整体跳过、不读写文件。
   顺带修正：写口令文件失败时启动日志不再声称「明文口令已写入」。
+- **「登录锁定」管理页面**（系统管理 → 登录锁定）。此前只有 `GET / DELETE /api/system/security/locked-accounts`
+  两个接口、菜单没有页面，账号被误锁时管理员在界面上什么也做不了，只能等锁定到期。现在页面列出当前被锁定的
+  用户名，有 `system:security:unlock` 权限时每行可「解锁」。页面在 `@describeadmin/system-ui`
+  （`systemPageMap` 的 `/system/security/index.vue`），菜单由 `0002-rbac-seed.sql` 补上
+  `path` / `component` 并改为可见；早先按「只有权限点」形态建过的库，下次迁移时由同一个 changeset 补齐，
+  不需要手动处理。
 
 ### Bug Fixes
 
-以下前 6 条来自 1.0.0 发布前审计（工作区根 `审计报告-1.0.0-发布前.md`），回归测试见 `framework-it` 的 `SecurityAuditFixesIT`。
+以下前 6 条来自 1.0.0 发布前的安全审计，回归测试见 `framework-it` 的 `SecurityAuditFixesIT`。
 
 - **分配角色 / 查用户角色不校验数据权限**：`PUT|GET /api/system/user/{id}/roles` 对数据权限范围外的用户
   照常生效，能跨部门改写任何人的角色。现在与重置密码、换头像同一口径，目标不可见即 `40400`。
@@ -245,6 +251,27 @@
     HSTS 默认不开（内网 http 部署会被锁死），注释里写了开启条件。
   - `TiptapPreview` 与 `.env` 的 `VITE_APP_STORE_SECURE_KEY` 补注释：前者 `v-html` 直出只能用于可信内容，
     后者打进产物、是混淆不是防护。
+  - **create-app 生成的工程生产构建后白屏**：外壳在生产模式下从 `window._VBEN_ADMIN_PRO_APP_CONF_` 读运行时配置，
+    而模板的 `vite.config.ts` 没有产出 `_app.config.js`。模板现在构建时生成它并在 `index.html` 里引用（文件名带内容哈希），
+    部署后改这个文件即可换接口地址；`@describeadmin/hooks` 的 `useAppConfig` 在文件缺失时回落到构建期的 `VITE_GLOB_*`，
+    不再白屏。模板 `.env*` 删掉了不生效的变量，`.env.analyze` 删除。发布流程的消费侧检查增加「生产构建 + 校验 `_app.config.js`」一步。
+  - **create-app 模板的 `VITE_PROXY_TARGET` 写在 `.env` 里不生效**：`vite.config.ts` 读的是 `process.env`，`.env` 文件里的值进不去。
+    改为从 `loadEnv` 读（进程环境变量仍然优先），`init-workspace.sh --proxy-target` 因此生效；`.env.development` 里加了注释掉的示例。
+  - **create-app 生成的工程 `pnpm install` 以错误退出**（`ERR_PNPM_IGNORED_BUILDS`）：pnpm 11 默认不执行依赖的安装脚本，
+    依赖树里的 `@parcel/watcher`、`vue-demi` 没有表态时安装以退出码 1 结束（依赖其实装上了，但 CI 会判失败），
+    pnpm 还会往工程里写一段占位配置。模板现在自带 `pnpm-workspace.yaml` 声明 `allowBuilds`。
+    发布前的消费侧检查此前用 `pnpm install --ignore-scripts` 绕过了这个问题，改为与业务方相同的 `pnpm install`。
+  - 默认应用名由 `Vben Admin` 改为 `Describe Admin`（偏好设置 `app.name`、`VITE_APP_TITLE` 的缺省值、「关于」组件），
+    「关于」组件的默认描述换成本框架的介绍。生成的工程仍以 `.env` 的 `VITE_APP_TITLE`（项目名）为准。
+  - 页脚默认不再显示上游的 `Copyright © 2024 Vben`：`copyright` 默认关闭、内容为空，并且不从浏览器缓存的偏好里恢复
+    （归部署方配置）；开发服务器启动时不再打印上游的文档地址；构建产物的版权横幅改为 describeadmin，保留 Vben Admin 的 MIT 声明。
+  - 登录页标语改为本框架的介绍；头像菜单「文档」指向 `https://describeadmin.github.io/docs/`。
+  - 前端 CI 增加 `pnpm lint`。
+- **archetype 生成的 `application.yml` 对 `server.forward-headers-strategy` 的说明有误**：原注释说容器只信任内网代理，
+  那是 Tomcat 的行为。框架用的 Undertow 会采信任何请求带的 `X-Forwarded-For`（取最后一段），所以打开它的前提是
+  应用端口只有代理能访问。注释与相关 javadoc 已更正；已生成的工程按此检查部署方式即可，不需要改代码。
+- **`BaseEntity` 的 javadoc 说默认主键是自增**：框架并不设默认值，archetype 生成的工程配的是 `AUTO`，
+  不写 `id-type` 时是 MyBatis-Plus 的默认 `ASSIGN_ID`（雪花 ID）。只改注释。
 - **编辑一次用户落两条操作日志**（`system:user 编辑` + `更新用户`，0.2.0 起）。
   `SysUserController.update` 覆写了 `BaseController.update` 又标了 `@OperLog`，
   `OperLogAspect` 的通用切点与注解切点同时命中。两条切点的互斥此前只靠"覆写方法别标注解"
@@ -343,6 +370,16 @@
   `@TableLogic`。`sys_dept` 未登记进数据权限，回查不受过滤影响。
   **构造函数新增 `SysDeptMapper` 参数**——`SysUserService` 不在 `api/` 包下，
   不属兼容性承诺范围，但自行 `new` 过它的代码需要跟改。
+- **调用方的输入错误被报成 500**。`GlobalExceptionHandler` 没有处理以下几种异常，全部落到兜底分支返回
+  HTTP 500「服务器内部错误」，「日期填错了」「接口路径写错了」看起来都像服务器坏了：
+  - 请求体解析失败（JSON 语法错、字段类型不对、日期格式错）→ `40000`「请求体格式错误」，能定位时附上字段路径
+    （如 `tags[0].date`），不回带 Jackson 的原始信息
+  - 路径变量 / 查询参数类型不对（如 `/api/system/user/abc`）→ `40000`「参数格式错误：id」
+  - 缺少必填查询参数 → `40000`「缺少参数：keyword」
+  - 路径不存在 → HTTP 404 + `40400`。Spring 6.1 起未匹配的请求抛 `NoResourceFoundException`，
+    不再是已处理的 `NoHandlerFoundException`
+
+  前三种与其他业务错误一样是 HTTP 200 + 错误码。
 
 ## 0.2.1 (2026-09-02)
 

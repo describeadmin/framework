@@ -5,7 +5,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <!--
-    业务方工程脚手架（develop_plan.md 9.2.2）。
+    业务方工程脚手架（docs/site/dev/architecture.md「业务方接入」）。
 
     它交付的不是"少敲几行 XML"，而是把两个【已实测的接入坑】固化成默认正确的初始状态：
       1. mysql-connector-j 版本被父 POM 的 dependencyManagement 覆盖 → 连 MySQL 5.7 直接失败
@@ -60,7 +60,7 @@
 
       另见下方 maven-resources-plugin 的 addDefaultExcludes=false —— 它是为了让
       .gitignore / .gitattributes 进得了 jar：Maven 的默认排除规则会把这类点文件悄悄丢掉，
-      而 develop_plan.md 发现 ⑫ 要求生成物必须带 .gitattributes
+      而 docs/site/dev/pitfalls.md ⑫ 要求生成物必须带 .gitattributes
       （多仓协作下换行符不统一会产生整文件 diff）。
       注意 addDefaultExcludes 只能配在插件上，配进 <resource> 里 Maven 会直接报
       "Unrecognised tag"。

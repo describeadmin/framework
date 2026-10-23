@@ -71,7 +71,7 @@ public abstract class AbstractMySqlIntegrationTest {
         // 框架 changelog 在 framework-system-starter 的 jar 里；biz_project 是本模块自带的
         // 最小业务 fixture，在 src/test/resources/db/changelog/app/ 下，靠 includeAll 扫到，不用登记。
         // 中文是否被读坏由 MigrationIT 按字节断言——spring.sql.init 曾因「平台默认编码」把
-        // 中文静默写坏（VERSION_BASELINE.md 发现 ⑤），换了入口也要有测试钉住。
+        // 中文静默写坏（docs/site/dev/pitfalls.md ⑤），换了入口也要有测试钉住。
         registry.add("describeadmin.migration.mode", () -> "apply");
         registry.add("describeadmin.migration.contexts", () -> "local");
 

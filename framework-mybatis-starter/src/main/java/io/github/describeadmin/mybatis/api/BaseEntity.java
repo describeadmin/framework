@@ -17,9 +17,10 @@ import java.time.LocalDateTime;
  * <p><b>业务实体不要重复定义这些字段。</b>
  *
  * <p>关于主键：这里刻意<b>不</b>指定 {@code @TableId(type = ...)}，让全局配置
- * {@code mybatis-plus.global-config.db-config.id-type} 生效（默认 {@code AUTO} 自增）。
- * 需要切换为雪花 ID 的场景（多地数据汇总、跨库迁移、分布式数据库）改配置即可，
- * 不必改代码。见 develop_plan.md 2.3.1。
+ * {@code mybatis-plus.global-config.db-config.id-type} 生效。describeadmin-archetype 生成的工程
+ * 显式配了 {@code AUTO}（数据库自增）；<b>不写这一项时是 MyBatis-Plus 自己的默认值 {@code ASSIGN_ID}
+ * （雪花 ID）</b>，框架不另设默认。需要切换的场景（多地数据汇总、跨库迁移、分布式数据库）改配置即可，
+ * 不必改代码。
  *
  * <p>关于字段类型：审计时间用 {@link LocalDateTime} 而非 {@code Timestamp}，
  * 避免跨时区行为差异；表结构上对应 {@code DATETIME}，不使用 {@code TIMESTAMP}

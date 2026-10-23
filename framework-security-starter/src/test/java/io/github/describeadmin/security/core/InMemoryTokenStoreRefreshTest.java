@@ -12,7 +12,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link InMemoryTokenStore} 的 access/refresh 双令牌行为（docs/LOGIN_MODULE_AUDIT.md E 项）。
+ * {@link InMemoryTokenStore} 的 access/refresh 双令牌行为。
  *
  * <p>签发/解析/吊销这些既有行为已由 {@code InMemoryTokenStoreTest} 覆盖，本类只补新增的
  * {@code issueWithRefresh}/{@code refresh}/{@code revokeRefreshToken}。

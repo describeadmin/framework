@@ -1,6 +1,6 @@
 # framework 发布到 Maven Central
 #
-# 详细操作手册见元仓库 docs/RELEASE.md。
+# 详细操作手册见docs/site/dev/release.md。
 #
 # 需要在 GitHub 组织/仓库 Secrets 中配置：
 #   CENTRAL_TOKEN_USERNAME / CENTRAL_TOKEN_PASSWORD  Central Portal User Token

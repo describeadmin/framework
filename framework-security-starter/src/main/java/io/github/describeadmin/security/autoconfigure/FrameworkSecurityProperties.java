@@ -272,7 +272,8 @@ public class FrameworkSecurityProperties {
          *
          * <p>IP 取的是 {@code request.getRemoteAddr()}，不信任 {@code X-Forwarded-For}。
          * 部署在反向代理之后时，需配 {@code server.forward-headers-strategy=native} 让容器
-         * 从受信代理还原真实客户端地址；不配的后果是所有人共享代理的 IP，本维度会对全员触发——
+         * 按 {@code X-Forwarded-For} 还原客户端地址，且应用端口只能让代理访问（Undertow 不校验请求是否来自代理）；
+         * 不配的后果是所有人共享代理的 IP，本维度会对全员触发——
          * 方向安全（多一次验证码），但不再能区分来源。
          */
         private final RiskDimension ip = new RiskDimension(10, Duration.ofMinutes(10));

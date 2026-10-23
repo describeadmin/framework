@@ -2,9 +2,10 @@ spring:
   application:
     name: ${artifactId}
 
-# 部署在 Nginx 等反向代理之后时打开：让容器从受信代理（默认内网地址段）还原真实客户端 IP。
-# 登录风控（验证码的 IP 维度）只认 request.getRemoteAddr()，不信任可伪造的 X-Forwarded-For；
-# 不打开的话所有人共享代理的 IP，验证码会对全员触发。直连部署不要打开。
+# 部署在 Nginx 等反向代理之后时打开：容器用 X-Forwarded-For 的最后一段（离应用最近的那层代理写入的）
+# 作为客户端 IP。登录风控（验证码的 IP 维度）只认这个地址；不打开的话所有人共享代理的 IP，验证码会对全员触发。
+# ⚠️ Undertow 不校验请求是否来自代理，任何请求带的 X-Forwarded-For 都会被采信：
+#    打开的前提是应用端口只有代理能访问（server.address: 127.0.0.1，或防火墙只放行代理）。直连部署不要打开。
 # server:
 #   forward-headers-strategy: native
 

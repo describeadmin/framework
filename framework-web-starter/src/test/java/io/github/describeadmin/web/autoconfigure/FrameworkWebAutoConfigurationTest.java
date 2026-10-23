@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>除了"Bean 在不在"，这里还要验证一件更重要的事：框架的 Module 确实被
  * Spring Boot 自动配置的 {@link ObjectMapper} 装上了。只断言 Bean 存在是不够的——
  * Module Bean 建了但没被 ObjectMapper 收走，是一种"引了却没生效、启动毫无异常"的
- * 失败形态（与 registry.md 准入规范第 3 条描述的插件装配陷阱同类）。
+ * 失败形态（与 docs/site/dev/plugin-dev.md 第 3 条描述的插件装配陷阱同类）。
  */
 @DisplayName("framework-web-starter JSON 自动配置")
 class FrameworkWebAutoConfigurationTest {

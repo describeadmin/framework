@@ -83,7 +83,7 @@ public class CaptchaGuard {
      *
      * @param type     登录方式标识
      * @param body     登录请求体，读取 {@code username}/{@code captchaId}/{@code captchaCode} 三个字段
-     * @param clientIp 客户端 IP，可为空。<b>必须是不可伪造的来源</b>（直连地址，或经受信代理还原的地址），
+     * @param clientIp 客户端 IP，可为空。<b>必须是不可伪造的来源</b>（{@code request.getRemoteAddr()}：直连地址，或容器按 {@code forward-headers-strategy} 还原的地址），
      *                 不能直接取 {@code X-Forwarded-For}——否则每次请求换一个伪造值即可绕过 IP 维度
      * @throws BizException {@link ResultCode#CAPTCHA_REQUIRED}（缺字段）或
      *                       {@link ResultCode#CAPTCHA_INVALID}（校验不通过）

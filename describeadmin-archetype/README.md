@@ -14,7 +14,7 @@ mvn archetype:generate -B \
 
 `archetypeVersion` 用最新的已发布版本（以 Maven Central 为准）——archetype 与框架同号发布，
 它生成的工程引用的就是这个框架版本。去掉 `-B` 进入交互模式，会逐项询问
-`archetype-metadata.xml` 里声明的参数。
+`archetype-metadata.xml` 里声明的参数。参数表见文档站的 [脚手架参数](https://describeadmin.github.io/docs/reference/scaffolding)。
 
 ## 它交付的是什么
 
@@ -33,7 +33,7 @@ jar 里的 Liquibase changelog，启动时由框架的迁移层执行。这正�
 
 早期的样板工程 POM 里配过 `maven-toolchains-plugin`，本脚手架**刻意不带**。
 
-框架自身构建也只要求 JDK 17+（同样不再用 toolchains，见 `develop_plan.md` 2.2.2「第八轮修订」）。
+框架自身构建也只要求 JDK 17+（同样不用 toolchains，见 docs 仓 `CLAUDE.md` 第 1 节）。
 业务方的约束同样只有一条：**Maven 进程自身跑在 JDK 17+**
 （`spring-boot-maven-plugin:repackage` 的硬要求）。至于用哪个发行版、哪个大版本，
 是业务方的自由 —— 产物侧已由 `<java.version>17</java.version>`（即 `release=17`）钉死，

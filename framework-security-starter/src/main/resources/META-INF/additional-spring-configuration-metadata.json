@@ -1,0 +1,38 @@
+{
+  "properties": [
+    {
+      "name": "describeadmin.security.captcha.applicable-types",
+      "defaultValue": ["password"]
+    },
+    {
+      "name": "describeadmin.security.captcha.ip.threshold",
+      "defaultValue": 10
+    },
+    {
+      "name": "describeadmin.security.captcha.ip.window",
+      "defaultValue": "10m"
+    },
+    {
+      "name": "describeadmin.security.captcha.global.threshold",
+      "defaultValue": 100
+    },
+    {
+      "name": "describeadmin.security.captcha.global.window",
+      "defaultValue": "5m"
+    },
+    {
+      "name": "describeadmin.security.captcha.issue.enabled",
+      "description": "是否限制验证码的签发频率（按 IP）。与 captcha.enabled 无关：验证码端点始终可用，这里限的是它被刷的速度。"
+    },
+    {
+      "name": "describeadmin.security.captcha.issue.threshold",
+      "description": "时间窗内同一 IP 最多领取的验证码道数，超过后 GET /api/auth/captcha 返回错误。",
+      "defaultValue": 60
+    },
+    {
+      "name": "describeadmin.security.captcha.issue.window",
+      "description": "签发计数的固定时间窗长度，到点整体清零。",
+      "defaultValue": "1m"
+    }
+  ]
+}

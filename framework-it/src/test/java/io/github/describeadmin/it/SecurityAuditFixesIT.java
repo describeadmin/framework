@@ -31,7 +31,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 1.0.0 发布前审计报告里那几处缺陷的回归（审计报告-1.0.0-发布前.md S1/S2/S8/S9 与低风险 2）。
+ * 1.0.0 发布前安全审计发现的几处缺陷的回归（越权改角色、授权上限、删用户不吊销令牌等，见 CHANGELOG 1.0.0）。
  *
  * <p>业务异常走 HTTP 200 + 响应体 {@code code}（见 {@code GlobalExceptionHandler}），
  * 所以这里断言的是 {@code code} 与<b>库里的具体值</b>，不只看"请求失败了"——
