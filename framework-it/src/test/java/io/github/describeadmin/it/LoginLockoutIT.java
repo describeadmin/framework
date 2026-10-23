@@ -162,7 +162,45 @@ class LoginLockoutIT extends AbstractMySqlIntegrationTest {
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
+    /**
+     * 管理页面可达：菜单要带 path / component 才会生成路由，component 还必须与前端
+     * system-ui 的 systemPageMap key（'/system/security/index.vue'）对得上，否则落 404 且不报错。
+     */
+    @Test
+    @DisplayName("ADMIN 的菜单树里有「登录锁定」页面，且 path / component 与前端页面表一致")
+    void lockoutPageIsRoutableForAdmin() {
+        ResponseEntity<Map> resp = rest.exchange("/api/auth/menus", HttpMethod.GET,
+                new HttpEntity<>(bearer(tokenOfAdmin())), Map.class);
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> page = findByPermCode((List<Map<String, Object>>) resp.getBody().get("data"),
+                "system:security:list");
+        assertThat(page).as("ADMIN 的菜单树里没有登录锁定页").isNotNull();
+        assertThat(page.get("menuName")).isEqualTo("登录锁定");
+        assertThat(page.get("path")).isEqualTo("/system/security");
+        assertThat(page.get("component")).isEqualTo("system/security/index");
+        assertThat(page.get("visible")).isEqualTo(1);
+    }
+
     // ------------------------------------------------------------------ 工具
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> findByPermCode(List<Map<String, Object>> nodes, String permCode) {
+        if (nodes == null) {
+            return null;
+        }
+        for (Map<String, Object> node : nodes) {
+            if (permCode.equals(node.get("permCode"))) {
+                return node;
+            }
+            Map<String, Object> found = findByPermCode((List<Map<String, Object>>) node.get("children"), permCode);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
 
     private ResponseEntity<String> login(String username, String password) {
         // 每次都顺带解出一个真实验证码——见类注释"与渐进式验证码的交互"，

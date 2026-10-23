@@ -319,25 +319,25 @@ WHERE m.perm_code = 'system:oper-log:list' AND m.deleted = 0
   AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:oper-log:remove' AND deleted = 0);
 
 -- -----------------------------------------------------------------------------
--- 登录锁定可观测性（docs/LOGIN_MODULE_AUDIT.md D 项）。暂无前端管理页面，
--- 先注册权限点避免 403；页面落地后补上 path / component 并把 visible 改成 1
--- （先例是 system:online 当年同样经历过的过渡状态，见上方注释）。
---
--- ⚠️ path / component 必须留 NULL，不能靠 visible = 0 来"藏起来"。
--- visible 只管侧边栏显隐，visible = 0 的菜单照常下发路由（这正是隐藏页面能力的基础，
--- 见 CLAUDE.md 4.5.1）。这里若填上 component，前端会拿一个并不存在的
--- 'system/security/index' 去 pageMap 查找，查不到就静默回落 404 页并在控制台报
--- "route component is invalid"——每次登录一条，指向一个根本没打算存在的页面。
--- 无 path 的菜单会被 toRouteRecords 直接过滤掉，权限点照常随 /api/auth/me 下发。
+-- 登录锁定：查看当前被锁定的账号、手动解锁。数据来自 LoginAttemptGuard 的失败计数，
+-- 没有数据库表（见 SysSecurityController）；页面是 @describeadmin/system-ui 的
+-- views/security/index.vue，对应 systemPageMap 的 '/system/security/index.vue'。
 -- -----------------------------------------------------------------------------
 
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
                       create_time, update_time, deleted, version)
-SELECT m.id, '登录锁定', 'MENU', 'system:security:list', NULL, NULL,
-       'lucide:lock', 9, 0, NOW(), NOW(), 0, 0
+SELECT m.id, '登录锁定', 'MENU', 'system:security:list', '/system/security', 'system/security/index',
+       'lucide:lock', 9, 1, NOW(), NOW(), 0, 0
 FROM sys_menu m
 WHERE m.menu_name = '系统管理' AND m.parent_id = 0 AND m.deleted = 0
   AND NOT EXISTS (SELECT 1 FROM sys_menu WHERE perm_code = 'system:security:list' AND deleted = 0);
+
+-- 这条菜单早先以「只有权限点、没有页面」的形态登记过（path / component 为 NULL、visible = 0），
+-- 那样建出的库上面的 INSERT 会因 NOT EXISTS 跳过，页面永远不可达。这里补齐；
+-- 守卫 path IS NULL 保证幂等，也不会覆盖管理员事后改过的路径。
+UPDATE sys_menu
+SET path = '/system/security', component = 'system/security/index', visible = 1, update_time = NOW()
+WHERE perm_code = 'system:security:list' AND deleted = 0 AND path IS NULL;
 
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, perm_code, path, component, icon, sort, visible,
                       create_time, update_time, deleted, version)
