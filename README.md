@@ -1,5 +1,7 @@
 # describeadmin framework
 
+![Describe Admin](./assets/logo-text.svg)
+
 describeadmin 的后端框架：开箱可用的 RBAC、数据权限、审计与操作日志、登录防护、系统管理，
 以 Spring Boot starter 的形式发布到 Maven Central（groupId `io.github.describeadmin`）。
 
