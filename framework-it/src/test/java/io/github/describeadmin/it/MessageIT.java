@@ -61,6 +61,7 @@ class MessageIT extends AbstractMySqlIntegrationTest {
         assertThat(latest).as("重复的收件人只发一条").hasSize(1);
         Map<String, Object> msg = latest.get(0);
         assertThat(msg.get("id")).as("Long 序列化为字符串（4.8）").isInstanceOf(String.class);
+        assertThat(msg).doesNotContainKey("deleted");
         assertThat(msg.get("title")).isEqualTo("收到待审批工单");
         assertThat(msg.get("content")).isEqualTo("张三提交了「服务器扩容」工单，请审批");
         assertThat(msg.get("link")).isEqualTo("/workorder/detail?id=1");
@@ -83,12 +84,38 @@ class MessageIT extends AbstractMySqlIntegrationTest {
         String dave = login("msg-dave");
         assertThat(code(rest.exchange("/api/auth/messages/" + carolId + "/read", HttpMethod.PUT,
                 new HttpEntity<>(bearer(dave)), Map.class))).isEqualTo(ResultCode.NOT_FOUND.getCode());
-        assertThat(code(rest.exchange("/api/auth/messages/" + carolId, HttpMethod.DELETE,
-                new HttpEntity<>(bearer(dave)), Map.class))).isEqualTo(ResultCode.NOT_FOUND.getCode());
+        assertThat(code(delete("/api/auth/messages/" + carolId, dave))).isEqualTo(ResultCode.NOT_FOUND.getCode());
 
         Map<String, Object> carolInbox = inbox(login("msg-carol"));
         assertThat(carolInbox.get("unreadCount")).isEqualTo(1);
         assertThat(titles(carolInbox)).containsExactly("carol 的消息");
+    }
+
+    @Test
+    @DisplayName("默认软删除保留消息行，并从查询和已读操作中排除")
+    void singleDeleteIsSoftByDefault() {
+        Long userId = createUser("msg-soft-delete", "msg-soft-delete");
+        sender.send(List.of(userId), new MessageDraft("workorder.approval", "待删除", null,
+                null, "soft-delete:1", null));
+        sender.send(List.of(userId), MessageDraft.of("system.notice", "保留", null, null));
+
+        String token = login("msg-soft-delete");
+        String id = idOf(inbox(token), "待删除");
+        String path = "/api/auth/messages/" + id;
+        assertThat(code(delete(path, token))).isZero();
+
+        Map<String, Object> inbox = inbox(token);
+        assertThat(inbox.get("unreadCount")).isEqualTo(1);
+        assertThat(titles(inbox)).containsExactly("保留");
+        assertThat(pageTitles(token, "current=1&size=10")).containsExactly("保留");
+        assertThat(pageTitles(token, "unread=true")).containsExactly("保留");
+
+        assertThat(code(delete(path, token))).isEqualTo(ResultCode.NOT_FOUND.getCode());
+        assertThat(code(put(path + "/read", token))).isEqualTo(ResultCode.NOT_FOUND.getCode());
+        assertThat(sender.markReadByBiz("workorder.approval", "soft-delete:1")).isZero();
+        assertThat(data(put("/api/auth/messages/read-all", token))).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT deleted FROM sys_message WHERE id = ? AND read_time IS NULL",
+                Integer.class, Long.valueOf(id))).isEqualTo(1);
     }
 
     @Test
@@ -100,19 +127,25 @@ class MessageIT extends AbstractMySqlIntegrationTest {
         sender.send(List.of(erin, frank), MessageDraft.of("system.notice", "第二条", null, null));
         String token = login("msg-erin");
         String first = idOf(inbox(token), "第一条");
+        String frankToken = login("msg-frank");
+        String frankFirst = idOf(inbox(frankToken), "第一条");
 
         assertThat(code(put("/api/auth/messages/" + first + "/read", token))).isZero();
         assertThat(code(put("/api/auth/messages/" + first + "/read", token))).as("重复标已读不报错").isZero();
+        assertThat(code(put("/api/auth/messages/" + frankFirst + "/read", frankToken))).isZero();
         assertThat(inbox(token).get("unreadCount")).isEqualTo(1);
 
-        ResponseEntity<Map> cleared = rest.exchange("/api/auth/messages/read", HttpMethod.DELETE,
-                new HttpEntity<>(bearer(token)), Map.class);
-        assertThat(data(cleared)).as("只删了一条已读").isEqualTo(1);
+        assertThat(data(delete("/api/auth/messages/read", token))).as("只删了一条已读").isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT deleted FROM sys_message WHERE id = ?",
+                Integer.class, Long.valueOf(first))).isEqualTo(1);
+        assertThat(data(delete("/api/auth/messages/read", token))).isEqualTo(0);
         assertThat(titles(inbox(token))).as("未读的第二条保留").containsExactly("第二条");
 
         assertThat(data(put("/api/auth/messages/read-all", token))).isEqualTo(1);
         assertThat(inbox(token).get("unreadCount")).isEqualTo(0);
-        assertThat(inbox(login("msg-frank")).get("unreadCount")).as("别人不受影响").isEqualTo(2);
+        Map<String, Object> frankInbox = inbox(frankToken);
+        assertThat(titles(frankInbox)).as("其他收件人的已读和未读消息都保留").containsExactly("第二条", "第一条");
+        assertThat(frankInbox.get("unreadCount")).isEqualTo(1);
     }
 
     @Test
@@ -209,6 +242,10 @@ class MessageIT extends AbstractMySqlIntegrationTest {
 
     private ResponseEntity<Map> put(String url, String token) {
         return rest.exchange(url, HttpMethod.PUT, new HttpEntity<>(bearer(token)), Map.class);
+    }
+
+    private ResponseEntity<Map> delete(String url, String token) {
+        return rest.exchange(url, HttpMethod.DELETE, new HttpEntity<>(bearer(token)), Map.class);
     }
 
     private static List<String> titles(Map<String, Object> inbox) {

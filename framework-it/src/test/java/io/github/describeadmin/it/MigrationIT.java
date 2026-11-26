@@ -3,6 +3,7 @@ package io.github.describeadmin.it;
 import io.github.describeadmin.system.autoconfigure.MigrationProperties;
 import io.github.describeadmin.system.migration.DescribeAdminLiquibase;
 import io.github.describeadmin.system.migration.MigrationMode;
+import liquibase.integration.spring.SpringLiquibase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -52,6 +53,7 @@ class MigrationIT extends AbstractMySqlIntegrationTest {
 
         List<String> files = jdbc.queryForList(
                 "SELECT FILENAME FROM DATABASECHANGELOG ORDER BY ORDEREXECUTED", String.class);
+        assertThat(files).contains("describeadmin/0003-message-soft-delete.sql");
         int lastFramework = -1;
         int firstApp = Integer.MAX_VALUE;
         for (int i = 0; i < files.size(); i++) {
@@ -77,6 +79,31 @@ class MigrationIT extends AbstractMySqlIntegrationTest {
         int before = jdbc.queryForObject("SELECT COUNT(*) FROM sys_menu", Integer.class);
         run(ds, MigrationMode.APPLY, null);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_menu", Integer.class)).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("升级为站内信增加删除标记，存量消息仍有效")
+    void addsDeleteFlagToExistingMessages() throws Exception {
+        DataSource ds = newSchema();
+        for (String file : List.of("0001-rbac-schema.sql", "0002-rbac-seed.sql")) {
+            SpringLiquibase liquibase = new SpringLiquibase();
+            liquibase.setDataSource(ds);
+            liquibase.setResourceLoader(new DefaultResourceLoader());
+            liquibase.setChangeLog("classpath:db/changelog/describeadmin/" + file);
+            liquibase.setContexts("local");
+            liquibase.afterPropertiesSet();
+        }
+        JdbcTemplate jdbc = new JdbcTemplate(ds);
+        jdbc.update("INSERT INTO sys_message (user_id, category, title) VALUES (?, ?, ?)",
+                100L, "system.notice", "存量消息");
+
+        assertThatThrownBy(() -> run(ds, MigrationMode.VALIDATE, null))
+                .hasStackTraceContaining("sys_message_deleted");
+        run(ds, MigrationMode.APPLY, null);
+        run(ds, MigrationMode.VALIDATE, null);
+
+        assertThat(jdbc.queryForObject("SELECT deleted FROM sys_message WHERE user_id = ? AND title = ?",
+                Integer.class, 100L, "存量消息")).isZero();
     }
 
     @Test

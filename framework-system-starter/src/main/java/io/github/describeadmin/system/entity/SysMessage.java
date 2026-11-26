@@ -1,8 +1,11 @@
 package io.github.describeadmin.system.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -15,8 +18,7 @@ import java.time.LocalDateTime;
  * <ul>
  *   <li>{@code version} 会和"全部已读""按业务键标已读"这类批量更新冲突；</li>
  *   <li>{@code create_by} 由 {@code MetaObjectHandler} 按当前请求用户填充，系统发送或异步发送时
- *       没有意义，发送人已由 {@link #senderId} 表达；</li>
- *   <li>逻辑删除只会让这张按人增长的表白白膨胀。收件人删除、清空都是物理删除。</li>
+ *       没有意义，发送人已由 {@link #senderId} 表达。</li>
  * </ul>
  * 写入由 {@code SysMessageService} 一次性控制，不需要自动填充。
  */
@@ -51,6 +53,12 @@ public class SysMessage implements Serializable {
 
     private LocalDateTime createTime;
 
+    /** 删除标记，初始值由数据库填充。 */
+    @JsonIgnore
+    @TableLogic(value = "0", delval = "1")
+    @TableField(insertStrategy = FieldStrategy.NEVER)
+    private Integer deleted;
+
     /** 非持久化字段：发送人昵称，供前端展示。 */
     @TableField(exist = false)
     private String senderName;
@@ -79,6 +87,8 @@ public class SysMessage implements Serializable {
     public void setReadTime(LocalDateTime readTime) { this.readTime = readTime; }
     public LocalDateTime getCreateTime() { return createTime; }
     public void setCreateTime(LocalDateTime createTime) { this.createTime = createTime; }
+    public Integer getDeleted() { return deleted; }
+    public void setDeleted(Integer deleted) { this.deleted = deleted; }
     public String getSenderName() { return senderName; }
     public void setSenderName(String senderName) { this.senderName = senderName; }
     public String getSenderAvatar() { return senderAvatar; }

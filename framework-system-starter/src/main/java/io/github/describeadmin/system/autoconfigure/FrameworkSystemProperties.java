@@ -12,6 +12,7 @@ public class FrameworkSystemProperties {
 
     private final Dict dict = new Dict();
     private final Config config = new Config();
+    private final Message message = new Message();
     private final OperLog operLog = new OperLog();
     private final DevSeed devSeed = new DevSeed();
 
@@ -21,6 +22,10 @@ public class FrameworkSystemProperties {
 
     public Config getConfig() {
         return config;
+    }
+
+    public Message getMessage() {
+        return message;
     }
 
     public OperLog getOperLog() {
@@ -60,6 +65,26 @@ public class FrameworkSystemProperties {
         public void setCacheTtl(Duration cacheTtl) {
             this.cacheTtl = cacheTtl;
         }
+    }
+
+    /** 站内信，前缀 {@code describeadmin.system.message}。 */
+    public static class Message {
+
+        /** 单条删除和清空已读的删除方式，默认软删除（{@code soft}），可设为 {@code physical}。 */
+        private MessageDeleteMode deleteMode = MessageDeleteMode.SOFT;
+
+        public MessageDeleteMode getDeleteMode() {
+            return deleteMode;
+        }
+
+        public void setDeleteMode(MessageDeleteMode deleteMode) {
+            this.deleteMode = deleteMode;
+        }
+    }
+
+    public enum MessageDeleteMode {
+        SOFT,
+        PHYSICAL
     }
 
     /** 操作日志，前缀 {@code describeadmin.system.oper-log}。 */
