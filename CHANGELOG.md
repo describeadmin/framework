@@ -7,6 +7,48 @@
 （见组织编码规范第 5 节）。没有内容的类别保留标题并写「无」，
 这样使用者不必怀疑是遗漏还是确实没有。
 
+## 1.1.0 (2026-11-27)
+
+站内信删除策略可配与系统列表排序收敛。`api/` 包无任何变更，1.0.0 接入方直接升级即可。
+
+### Breaking Changes
+
+- **站内信的「删除」与「清空已读」默认从物理删除改为软删除**。
+  - `sys_message` 新增 `deleted` 列，随 Liquibase 迁移
+    `describeadmin/0003-message-soft-delete.sql` 自动加列，无需手动处理
+    （默认 `validate` 模式下，升级后首次启动会列出这条未执行的 changeset，
+    照常 `apply` 或让 DBA 执行即可）。
+  - 删除方式由新配置 `describeadmin.system.message.delete-mode` 决定：
+    `soft`（**默认**，行标记 `deleted = 1`，查询一律过滤）/ `physical`（切回 1.0.0 行为，
+    行真正删除）。列表、轮询、已读、按业务键收尾等全部查询只返回未删除的消息，
+    删除过的消息重新登录、翻页都不可见，接口响应结构与 1.0.0 完全一致。
+  - **直读 `sys_message` 的自定义业务 SQL 需自行补 `deleted = 0` 过滤**——框架不再物理删行，
+    被删消息仍留在表里，不过滤会把已删消息查出来。保留软删除的理由：站内信是审计与待办凭证，
+    物理删除后「谁发给了谁、何时读的」不可追溯；表膨胀由部署方按需归档，或配 `physical` 维持原状。
+  - 1.0.0 CHANGELOG 中「删除与清空已读都是物理删除，清空不会删掉未读消息」的描述自本版本起
+    仅在 `physical` 模式下成立；`soft` 模式下清空已读同样只删已读的（软删），未读保留。
+
+### New Features
+
+- **`describeadmin.system.message.delete-mode`**（`soft` / `physical`，默认 `soft`）：
+  站内信单条删除与清空已读的删除方式，见上方 Breaking Changes。
+- **系统管理各列表统一稳定排序，跨页不重不漏**。此前用户、字典类型、参数配置的
+  列表查询不带 `ORDER BY`，MySQL 返回顺序不保证，翻页时同一行可能在两页重复出现或两页都不出现；
+  操作日志按 `create_time` 倒序，同一秒内写入的日志顺序不稳定。现在：
+  - 用户 / 字典类型 / 参数配置 / 操作日志按 `id` 倒序（最新的在前）；
+  - 角色 / 字典数据维持既有的 `sort` 升序、`id` 升序，本次补上回归测试；
+  - 在线用户会话排序在服务端收敛：登录时间倒序，时间相同时按会话标识倒序，
+    旧 `TokenStore` 实现未提供会话标识时按用户 ID 倒序——不再依赖
+    `TokenStore.listActive()` 各实现的返回顺序。
+- **测试**：新增 `SystemPaginationIT`（用同 id 段、同/异 `create_time`、不同 `sort` 的数据
+  逐页断言六个列表的顺序）、`MessagePhysicalDeleteIT`（`physical` 模式下行真正删除）、
+  `SysOnlineControllerTest`（排序稳定性）；扩展 `MessageIT` 与 `MigrationIT`
+  （覆盖 0003 迁移与软删过滤）。
+
+### Bug Fixes
+
+- 无
+
 ## 1.0.0 (2026-11-06)
 
 **第一个正式版。** 自本版本起严格遵循 SemVer：`api/` 包的 public 签名只在大版本变更，
