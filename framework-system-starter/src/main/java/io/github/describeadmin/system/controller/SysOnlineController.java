@@ -17,7 +17,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * 在线用户与强制下线。
@@ -39,6 +41,11 @@ import java.util.List;
 @RequestMapping("/api/system/online")
 public class SysOnlineController {
 
+    private static final Comparator<ActiveSession> SESSION_ORDER =
+            Comparator.comparing(ActiveSession::getIssuedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(ActiveSession::getSessionId, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(ActiveSession::getUserId, Comparator.nullsLast(Comparator.reverseOrder()));
+
     private final TokenStore tokenStore;
 
     public SysOnlineController(TokenStore tokenStore) {
@@ -52,7 +59,7 @@ public class SysOnlineController {
      * IP 与设备描述（见 {@link ActiveSession#getIp()} / {@link ActiveSession#getDevice()}）。
      * 响应里不含令牌本身，理由见 {@link ActiveSession} 的类注释。
      *
-     * <p>排序沿用 {@link TokenStore#listActive()} 的约定：最近登录的在前。
+     * <p>最近登录的在前；登录时间相同时按会话标识倒序，旧存储未提供会话标识时按用户 ID 倒序。
      *
      * <p>发起本次请求的那条会话标 {@code current = true}：比对的是当前请求令牌的
      * {@link ActiveSession#sessionIdOf 摘要}，同一账号的其他会话（别的浏览器、
@@ -67,14 +74,13 @@ public class SysOnlineController {
     @GetMapping
     public Result<PageResult<OnlineSessionView>> list(PageQuery query,
             @RequestParam(required = false) String username, HttpServletRequest request) {
-        List<ActiveSession> all = tokenStore.listActive();
+        Stream<ActiveSession> sessions = tokenStore.listActive().stream();
         if (username != null && !username.isBlank()) {
             String keyword = username.trim().toLowerCase();
-            all = all.stream()
-                    .filter(session -> session.getUsername() != null
-                            && session.getUsername().toLowerCase().contains(keyword))
-                    .toList();
+            sessions = sessions.filter(session -> session.getUsername() != null
+                    && session.getUsername().toLowerCase().contains(keyword));
         }
+        List<ActiveSession> all = sessions.sorted(SESSION_ORDER).toList();
         long total = all.size();
         int from = (int) Math.min((query.getCurrent() - 1) * query.getSize(), total);
         int to = (int) Math.min(from + query.getSize(), total);

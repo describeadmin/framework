@@ -40,7 +40,7 @@ public class SysOperLogService {
                 .eq(status != null, "status", status)
                 .ge(start != null, "create_time", start)
                 .le(end != null, "create_time", end)
-                .orderByDesc("create_time");
+                .orderByDesc("id");
         Page<SysOperLog> page = Page.of(query.getCurrent(), query.getSize());
         Page<SysOperLog> result = mapper.selectPage(page, wrapper);
         return new PageResult<>(result.getRecords(), result.getTotal(),
