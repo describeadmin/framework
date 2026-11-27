@@ -97,7 +97,9 @@ class AuthFlowIT extends AbstractMySqlIntegrationTest {
     @Test
     @DisplayName("带上令牌即可访问受保护接口")
     void protectedEndpointWithToken() {
-        ResponseEntity<String> resp = rest.exchange("/api/system/user", HttpMethod.GET,
+        // 列表按 id 倒序后 admin（id 最小）落在后面的页，用 username 过滤锁定 admin，
+        // 断言不受其他用例造的数据量影响
+        ResponseEntity<String> resp = rest.exchange("/api/system/user?username=admin", HttpMethod.GET,
                 new HttpEntity<>(bearer(tokenOfAdmin())), String.class);
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);

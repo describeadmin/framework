@@ -66,6 +66,7 @@ public class SysUserController extends BaseController<SysUserService, SysUserMap
         wrapper.likeRight(text(params, "mobile") != null, "mobile", text(params, "mobile"));
         wrapper.eq(asInt(params, "status") != null, "status", asInt(params, "status"));
         wrapper.eq(asLong(params, "deptId") != null, "dept_id", asLong(params, "deptId"));
+        wrapper.orderByDesc("id");
         return wrapper;
     }
 

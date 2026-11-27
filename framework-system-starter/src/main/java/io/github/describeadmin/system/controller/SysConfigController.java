@@ -39,6 +39,7 @@ public class SysConfigController extends BaseController<SysConfigService, SysCon
         QueryWrapper<SysConfig> wrapper = new QueryWrapper<>();
         wrapper.likeRight(text(params, "configName") != null, "config_name", text(params, "configName"));
         wrapper.likeRight(text(params, "configKey") != null, "config_key", text(params, "configKey"));
+        wrapper.orderByDesc("id");
         return wrapper;
     }
 

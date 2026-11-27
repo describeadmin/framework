@@ -13,6 +13,8 @@ databaseChangeLog:
       file: db/changelog/describeadmin/0001-rbac-schema.sql
   - include:
       file: db/changelog/describeadmin/0002-rbac-seed.sql
+  - include:
+      file: db/changelog/describeadmin/0003-message-soft-delete.sql
   - includeAll:
       path: db/changelog/app/
       errorIfMissingOrEmpty: false

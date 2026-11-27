@@ -8,6 +8,8 @@ import io.github.describeadmin.common.api.PageResult;
 import io.github.describeadmin.common.api.ResultCode;
 import io.github.describeadmin.system.api.MessageDraft;
 import io.github.describeadmin.system.api.MessageSender;
+import io.github.describeadmin.system.autoconfigure.FrameworkSystemProperties;
+import io.github.describeadmin.system.autoconfigure.FrameworkSystemProperties.MessageDeleteMode;
 import io.github.describeadmin.system.entity.SysMessage;
 import io.github.describeadmin.system.entity.SysUser;
 import io.github.describeadmin.system.mapper.SysMessageMapper;
@@ -46,11 +48,14 @@ public class SysMessageService implements MessageSender {
     private final SysMessageMapper mapper;
     private final SysUserMapper userMapper;
     private final Clock clock;
+    private final MessageDeleteMode deleteMode;
 
-    public SysMessageService(SysMessageMapper mapper, SysUserMapper userMapper, ObjectProvider<Clock> clock) {
+    public SysMessageService(SysMessageMapper mapper, SysUserMapper userMapper, ObjectProvider<Clock> clock,
+                             FrameworkSystemProperties properties) {
         this.mapper = mapper;
         this.userMapper = userMapper;
         this.clock = clock.getIfAvailable(Clock::systemDefaultZone);
+        this.deleteMode = properties.getMessage().getDeleteMode();
     }
 
     @Override
@@ -135,14 +140,19 @@ public class SysMessageService implements MessageSender {
     }
 
     public void removeOwn(Long userId, Long id) {
-        if (mapper.deleteOwn(userId, id) == 0) {
+        int deleted = deleteMode == MessageDeleteMode.PHYSICAL
+                ? mapper.deleteOwn(userId, id)
+                : mapper.delete(new QueryWrapper<SysMessage>().eq("id", id).eq("user_id", userId));
+        if (deleted == 0) {
             throw notFound(id);
         }
     }
 
     /** 清空已读，返回删除条数。未读消息保留。 */
     public int clearReadOwn(Long userId) {
-        return mapper.deleteReadOwn(userId);
+        return deleteMode == MessageDeleteMode.PHYSICAL
+                ? mapper.deleteReadOwn(userId)
+                : mapper.delete(new QueryWrapper<SysMessage>().eq("user_id", userId).isNotNull("read_time"));
     }
 
     private boolean existsOwn(Long userId, Long id) {

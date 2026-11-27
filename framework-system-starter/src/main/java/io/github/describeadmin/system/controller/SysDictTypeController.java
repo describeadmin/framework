@@ -56,6 +56,7 @@ public class SysDictTypeController
         wrapper.likeRight(text(params, "dictName") != null, "dict_name", text(params, "dictName"));
         wrapper.likeRight(text(params, "dictType") != null, "dict_type", text(params, "dictType"));
         wrapper.eq(asInt(params, "status") != null, "status", asInt(params, "status"));
+        wrapper.orderByDesc("id");
         return wrapper;
     }
 }
