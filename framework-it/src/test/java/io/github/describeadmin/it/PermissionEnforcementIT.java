@@ -196,8 +196,10 @@ class PermissionEnforcementIT extends AbstractMySqlIntegrationTest {
 
         String depts = rest.exchange("/api/system/dept/options", HttpMethod.GET, req, String.class).getBody();
         assertThat(depts).contains("\"label\":\"总部\"");
+        // 带引号匹配字段名：别的用例建的部门名里就含 "ancestors-"（SystemModuleIT），
+        // 裸字符串断言会因为一个合法的 label 而误报
         assertThat(depts).as("负责人/电话/物化路径都超出了\"填个下拉框\"该有的范围")
-                .doesNotContain("leader").doesNotContain("phone").doesNotContain("ancestors");
+                .doesNotContain("\"leader\"").doesNotContain("\"phone\"").doesNotContain("\"ancestors\"");
 
         String menus = rest.exchange("/api/system/menu/options", HttpMethod.GET, req, String.class).getBody();
         assertThat(menus).contains("\"label\":\"用户管理\"");
